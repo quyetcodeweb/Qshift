@@ -156,7 +156,7 @@ export default function Dashboard() {
 
           {/* Month/Year Filter */}
           {filterMode === "month" && (
-            <div className="grid gap-3 sm:grid-cols-[150px_150px_auto] sm:items-end">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-[150px_150px_auto] sm:items-end">
               <div>
                 <Select
                   label="Tháng"
@@ -190,9 +190,9 @@ export default function Dashboard() {
                 variant="text"
                 onClick={fetchStats}
                 disabled={loading}
-                className="text-blue-600 mt-1"
+                className="col-span-2 h-10 justify-self-start px-3 text-blue-600 sm:col-span-1 sm:mt-1"
               >
-                {loading ? "⏳ Đang tải..." : "🔄 Làm Mới"}
+                {loading ? "Dang tai" : "Lam moi"}
               </Button>
             </div>
           )}
