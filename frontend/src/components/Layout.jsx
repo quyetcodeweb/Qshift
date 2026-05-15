@@ -5,10 +5,11 @@ import {
   CalendarDaysIcon,
   ClockIcon,
   CurrencyDollarIcon,
+  ArrowLeftOnRectangleIcon,
   HomeIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/solid";
-import { getRole } from "../utils/auth";
+import { getRole, logout } from "../utils/auth";
 
 function MobileNavItem({ to, icon: Icon, label, active }) {
   return (
@@ -58,6 +59,14 @@ function MobileChrome() {
             <Link to="/notifications" aria-label="Thông báo">
               <BellIcon className="h-6 w-6 text-gray-700" />
             </Link>
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Đăng xuất"
+              className="rounded-full border border-gray-200 p-2 text-gray-700 shadow-sm"
+            >
+              <ArrowLeftOnRectangleIcon className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </header>
