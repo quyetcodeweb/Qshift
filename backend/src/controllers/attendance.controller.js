@@ -1,6 +1,13 @@
 import database from "../config/db.js";
 
-const TODAY_SQL = "CURDATE()";
+const LOCAL_NOW_SQL = "(UTC_TIMESTAMP() + INTERVAL 7 HOUR)";
+const TODAY_SQL = `DATE(${LOCAL_NOW_SQL})`;
+const VIETNAM_TIMEZONE_OFFSET = "+07:00";
+
+function toVietnamDateTime(date, time) {
+  if (!date || !time) return null;
+  return new Date(`${date}T${time}${VIETNAM_TIMEZONE_OFFSET}`);
+}
 
 async function getCurrentUser(userId) {
   const [users] = await database.query(
@@ -89,14 +96,14 @@ export async function scanMissingAttendanceNotifications() {
                THEN TIMESTAMP(s.work_date, sh.end_time)
              ELSE DATE_ADD(TIMESTAMP(s.work_date, sh.end_time), INTERVAL 1 DAY)
            END
-         ) <= NOW()
+         ) <= ${LOCAL_NOW_SQL}
          AND DATE(
            CASE
              WHEN sh.end_time > sh.start_time
                THEN TIMESTAMP(s.work_date, sh.end_time)
              ELSE DATE_ADD(TIMESTAMP(s.work_date, sh.end_time), INTERVAL 1 DAY)
            END
-         ) = CURDATE()
+         ) = ${TODAY_SQL}
        GROUP BY s.work_date, s.shift_id, sh.shift_name, sh.start_time, sh.end_time`
     );
 
@@ -283,7 +290,7 @@ export async function markAttendance(req, res) {
        WHERE s.schedule_id = ?
          AND s.employee_id = ?
          AND s.status = 'PUBLISHED'
-         AND s.work_date = CURDATE()`,
+         AND s.work_date = ${TODAY_SQL}`,
       [schedule_id, employee.employee_id]
     );
 
@@ -292,8 +299,8 @@ export async function markAttendance(req, res) {
     }
 
     const schedule = schedules[0];
-    const shiftStart = new Date(`${schedule.work_date}T${schedule.start_time}`);
-    let shiftEnd = new Date(`${schedule.work_date}T${schedule.end_time}`);
+    const shiftStart = toVietnamDateTime(schedule.work_date, schedule.start_time);
+    let shiftEnd = toVietnamDateTime(schedule.work_date, schedule.end_time);
 
     if (shiftEnd <= shiftStart) {
       shiftEnd = new Date(shiftEnd.getTime() + 24 * 60 * 60 * 1000);
@@ -322,7 +329,7 @@ export async function markAttendance(req, res) {
 
       await database.query(
         `INSERT INTO attendance (employee_id, schedule_id, check_in, status)
-         VALUES (?, ?, NOW(), ?)`,
+         VALUES (?, ?, ${LOCAL_NOW_SQL}, ?)`,
         [employee.employee_id, schedule_id, attendanceStatus]
       );
 
@@ -345,7 +352,7 @@ export async function markAttendance(req, res) {
 
     await database.query(
       `UPDATE attendance
-       SET check_out = NOW()
+       SET check_out = ${LOCAL_NOW_SQL}
        WHERE schedule_id = ?`,
       [schedule_id]
     );

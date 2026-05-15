@@ -20,6 +20,13 @@ function authHeaders() {
   return { Authorization: `Bearer ${token}` };
 }
 
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function toLocalDateTime(date, time) {
   if (!date || !time) return null;
   const [year, month, day] = date.split("-").map(Number);
@@ -67,6 +74,7 @@ export default function AttendancePage() {
   const [actionLoading, setActionLoading] = useState(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(new Date());
+  const [currentDay, setCurrentDay] = useState(() => formatDate(new Date()));
 
   const fetchToday = useCallback(async () => {
     try {
@@ -86,10 +94,14 @@ export default function AttendancePage() {
 
   useEffect(() => {
     fetchToday();
-  }, [fetchToday]);
+  }, [currentDay, fetchToday]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30000);
+    const timer = setInterval(() => {
+      const nextNow = new Date();
+      setNow(nextNow);
+      setCurrentDay(formatDate(nextNow));
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -145,7 +157,7 @@ export default function AttendancePage() {
             Chấm công hôm nay
           </Typography>
           <Typography className="text-sm text-gray-600">
-            {new Date().toLocaleDateString("vi-VN", {
+            {new Date(`${currentDay}T00:00:00`).toLocaleDateString("vi-VN", {
               weekday: "long",
               day: "2-digit",
               month: "2-digit",
