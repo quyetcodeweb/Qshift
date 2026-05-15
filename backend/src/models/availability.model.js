@@ -1,0 +1,143 @@
+import db from "../config/db.js";
+
+// ================= AVAILABILITY =================
+export const save = async ({ employee_id, availability }) => {
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const dates = availability.map((a) => a.date);
+
+    if (dates.length > 0) {
+      await conn.query(
+        `DELETE FROM employee_availability 
+         WHERE employee_id=? AND work_date IN (?)`,
+        [employee_id, dates]
+      );
+    }
+
+    for (const item of availability) {
+      await conn.query(
+        `INSERT INTO employee_availability 
+        (employee_id, shift_id, work_date)
+        VALUES (?, ?, ?)`,
+        [employee_id, item.shift_id, item.date]
+      );
+    }
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
+export const get = async (employee_id, month, year) => {
+  const [rows] = await db.query(
+    `SELECT * FROM employee_availability
+     WHERE employee_id=? 
+     AND MONTH(work_date)=? 
+     AND YEAR(work_date)=?`,
+    [employee_id, month, year]
+  );
+
+  return rows;
+};
+
+// ================= REQUEST =================
+export const createRequest = async (user_id, month, year, data) => {
+  if (!Array.isArray(data)) {
+    throw new Error("Invalid availability data");
+  }
+
+  if (!user_id || !month || !year) {
+    throw new Error(`Missing required fields: user_id=${user_id}, month=${month}, year=${year}`);
+  }
+
+  try {
+    // Get employee_id from user
+    const [userRows] = await db.query(
+      "SELECT employee_id FROM employees WHERE user_id=?",
+      [user_id]
+    );
+
+    const employee_id = userRows[0]?.employee_id;
+
+    // Try to insert with employee_id
+    const [result] = await db.query(
+      `INSERT INTO availability_requests (user_id, employee_id, month, year, data)
+       VALUES (?, ?, ?, ?, ?)`,
+      [user_id, employee_id, month, year, JSON.stringify(data)]
+    );
+
+    console.log("✅ createRequest success:", { requestId: result.insertId, user_id, month, year });
+    return result.insertId;
+  } catch (err) {
+    // Fallback: insert without employee_id if column doesn't exist
+    console.warn("⚠️ Insert with employee_id failed, trying fallback:", err.message);
+    const [result] = await db.query(
+      `INSERT INTO availability_requests (user_id, month, year, data)
+       VALUES (?, ?, ?, ?)`,
+      [user_id, month, year, JSON.stringify(data)]
+    );
+    console.log("✅ createRequest fallback success:", { requestId: result.insertId, user_id, month, year });
+    return result.insertId;
+  }
+};
+
+export const getRequestById = async (id) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT ar.*, e.name as employee_name 
+       FROM availability_requests ar
+       LEFT JOIN employees e ON ar.employee_id = e.employee_id
+       WHERE ar.id=?`,
+      [id]
+    );
+    return rows[0];
+  } catch (err) {
+    // Fallback if column doesn't exist yet
+    console.warn("JOIN query failed, using fallback query:", err.message);
+    const [rows] = await db.query(
+      "SELECT * FROM availability_requests WHERE id=?",
+      [id]
+    );
+    return rows[0];
+  }
+};
+
+export const updateRequestStatus = async (id, status) => {
+  await db.query(
+    "UPDATE availability_requests SET status=? WHERE id=?",
+    [status, id]
+  );
+};
+
+// ================= USER =================
+export const getAdmins = async () => {
+  const [rows] = await db.query(
+    "SELECT user_id FROM users WHERE role='ADMIN'"
+  );
+  return rows;
+};
+
+// ================= NOTIFICATION =================
+export const createNotification = async (
+  user_id,
+  message,
+  type = null,
+  ref_id = null
+) => {
+  if (type === "AVAILABILITY_REQUEST" && !ref_id) {
+    throw new Error("Missing ref_id for availability request");
+  }
+
+  await db.query(
+    `INSERT INTO notifications (user_id, message, type, ref_id)
+     VALUES (?, ?, ?, ?)`,
+    [user_id, message, type, ref_id]
+  );
+};

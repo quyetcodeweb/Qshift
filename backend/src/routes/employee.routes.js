@@ -1,0 +1,17 @@
+import express from "express";
+import { verifyToken } from "../middlewares/auth.middleware.js";
+import {
+  createEmployee,
+  getEmployees,
+  getMyProfile,
+  updateEmployee,
+} from "../controllers/employee.controller.js";
+
+const router = express.Router();
+
+router.post("/", createEmployee);
+router.get("/", getEmployees);
+router.get("/me", verifyToken, getMyProfile);
+router.put("/:id", verifyToken, updateEmployee);
+
+export default router;

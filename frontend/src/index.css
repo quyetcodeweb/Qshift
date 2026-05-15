@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body {
+  background-color: #ffffff;
+  font-family: Arial;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+.primary {
+  background-color: #1890ff;
+  color: white;
+}
+
+.card {
+  background: #e6f4ff;
+  border-radius: 12px;
+  padding: 16px;
+}
