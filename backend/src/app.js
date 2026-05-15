@@ -48,11 +48,19 @@ app.get("/api/health", (req, res) => {
 app.get("/api/db-check", async (req, res) => {
   try {
     const [rows] = await pool.query("SELECT 1 AS result");
-    res.json({ success: true, result: rows[0]?.result });
-  } catch (error) {
+    res.json({
+      success: true,
+      data: rows,
+    });
+  } catch (err) {
+    console.error("DB CHECK ERROR:", err);
+
     res.status(500).json({
       success: false,
-      error: error.message,
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
     });
   }
 });
