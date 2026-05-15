@@ -29,7 +29,11 @@ export default function Login() {
       // 👉 redirect về dashboard
       window.location.href = "/";
     } catch (err) {
-      setError(err.response?.data?.message || "Đăng nhập thất bại");
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Không đăng nhập được",
+      );
     } finally {
       setLoading(false);
     }
