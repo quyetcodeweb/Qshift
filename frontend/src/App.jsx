@@ -15,6 +15,7 @@ import AttendancePage from "./pages/AttendancePage";
 import AttendanceHistoryPage from "./pages/AttendanceHistoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import PayrollPage from "./pages/PayrollPage";
+import ShiftSwapManagementPage from "./pages/ShiftSwapManagementPage";
 import { isLoggedIn } from "./utils/auth";
 
 function App() {
@@ -70,6 +71,15 @@ function App() {
           element={
             <ProtectedRoute roles={["ADMIN"]}>
               <ShiftManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="shiftSwaps"
+          element={
+            <ProtectedRoute roles={["ADMIN"]}>
+              <ShiftSwapManagementPage />
             </ProtectedRoute>
           }
         />

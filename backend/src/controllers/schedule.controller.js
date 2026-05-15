@@ -245,7 +245,7 @@ export async function getCurrentSchedules(req, res) {
   try {
     const userId = req.user?.user_id;
 
-    let { month, year } = req.query;
+    let { month, year, scope } = req.query;
 
     const allMonths = month === "all";
     const allYears = year === "all";
@@ -258,7 +258,7 @@ export async function getCurrentSchedules(req, res) {
       year = year || now.getFullYear();
     }
 
-    console.log("[getCurrentSchedules] User:", userId, "Requesting:", { month, year });
+    console.log("[getCurrentSchedules] User:", userId, "Requesting:", { month, year, scope });
 
     const [userRole] = await database.query(
       "SELECT role FROM users WHERE user_id = ?",
@@ -271,8 +271,8 @@ export async function getCurrentSchedules(req, res) {
     };
     let schedules;
 
-    if (userRole?.[0]?.role === "ADMIN") {
-      console.log("[getCurrentSchedules] ADMIN access - fetching schedules");
+    if (userRole?.[0]?.role === "ADMIN" || scope === "all") {
+      console.log("[getCurrentSchedules] Shared access - fetching all schedules");
       schedules = await getSchedulesByFilters(scheduleFilters);
     } else {
       console.log("[getCurrentSchedules] EMPLOYEE access - fetching personal schedules");

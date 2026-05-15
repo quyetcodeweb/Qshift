@@ -5,6 +5,18 @@ export const getUsers = async () => {
   return rows;
 };
 
+export const getUserById = async (id) => {
+  const [rows] = await db.query("SELECT * FROM users WHERE user_id=?", [id]);
+  return rows[0] || null;
+};
+
+export const countAdmins = async () => {
+  const [rows] = await db.query(
+    "SELECT COUNT(*) as total FROM users WHERE role='ADMIN'"
+  );
+  return Number(rows[0]?.total || 0);
+};
+
 export const updateUser = async (id, data) => {
   const { username, password, role, status } = data;
 

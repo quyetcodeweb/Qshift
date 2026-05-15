@@ -8,12 +8,18 @@ import {
   Input,
 } from "@material-tailwind/react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
+const defaultForm = {
+  status: "Đang làm",
+};
+
 export default function EmployeePage() {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState(defaultForm);
 
   const fetchEmployees = async () => {
     const res = await axios.get("http://localhost:5000/api/employees");
@@ -21,38 +27,59 @@ export default function EmployeePage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEmployees();
   }, []);
 
   const handleCreate = async () => {
-    await axios.post("http://localhost:5000/api/employees", form);
+    const res = await axios.post("http://localhost:5000/api/employees", form);
+    const employeeId = res.data?.employee?.employee_id;
+
     setOpen(false);
-    setForm({});
+    setForm(defaultForm);
     fetchEmployees();
+
+    alert("Đã thêm nhân viên thành công. Vui lòng thêm vai trò cho nhân viên.");
+    navigate("/employeeRoles", {
+      state: {
+        employeeId,
+        message: "Vui lòng thêm vai trò cho nhân viên mới.",
+      },
+    });
+  };
+
+  const openCreateModal = () => {
+    setForm(defaultForm);
+    setOpen(true);
+  };
+
+  const toggleEmployeeStatus = () => {
+    setForm((prev) => ({
+      ...prev,
+      status: prev.status === "Đang làm" ? "Nghỉ" : "Đang làm",
+    }));
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <Card className="p-6 shadow-lg rounded-2xl">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen bg-gray-50 p-6">
+      <Card className="rounded-2xl p-6 shadow-lg">
+        <div className="mb-6 flex items-center justify-between">
           <Typography variant="h4" className="font-bold text-gray-800">
             Quản lý nhân viên
           </Typography>
 
           <Button
-            onClick={() => setOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 rounded-lg"
+            onClick={openCreateModal}
+            className="rounded-lg bg-blue-600 hover:bg-blue-700"
           >
             + Thêm nhân viên
           </Button>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="bg-gray-100 text-gray-600 text-sm">
+              <tr className="bg-gray-100 text-sm text-gray-600">
                 <th className="p-3">Tên</th>
                 <th className="p-3">Email</th>
                 <th className="p-3">SĐT</th>
@@ -62,20 +89,22 @@ export default function EmployeePage() {
             </thead>
 
             <tbody>
-              {employees.map((e) => (
+              {employees.map((employee) => (
                 <tr
-                  key={e.employee_id}
-                  className="border-b hover:bg-gray-50 transition"
+                  key={employee.employee_id}
+                  className="border-b transition hover:bg-gray-50"
                 >
-                  <td className="p-3 font-medium text-gray-800">{e.name}</td>
-                  <td className="p-3 text-gray-600">{e.email}</td>
-                  <td className="p-3">{e.phone}</td>
-                  <td className="p-3 text-green-600 font-semibold">
-                    {Number(e.hourly_rate).toLocaleString()} đ
+                  <td className="p-3 font-medium text-gray-800">
+                    {employee.name}
+                  </td>
+                  <td className="p-3 text-gray-600">{employee.email}</td>
+                  <td className="p-3">{employee.phone}</td>
+                  <td className="p-3 font-semibold text-green-600">
+                    {Number(employee.hourly_rate).toLocaleString()} đ
                   </td>
                   <td className="p-3 text-gray-500">
-                    {e.hire_date
-                      ? new Date(e.hire_date).toLocaleDateString()
+                    {employee.hire_date
+                      ? new Date(employee.hire_date).toLocaleDateString()
                       : "-"}
                   </td>
                 </tr>
@@ -84,7 +113,6 @@ export default function EmployeePage() {
           </table>
         </div>
 
-        {/* Modal */}
         <Dialog open={open} handler={() => setOpen(false)} size="sm">
           <DialogHeader className="text-lg font-semibold">
             Thêm nhân viên
@@ -123,16 +151,44 @@ export default function EmployeePage() {
               onChange={(e) => setForm({ ...form, hire_date: e.target.value })}
             />
 
-            <Input
-              label="Trạng thái"
-              value={form.status || ""}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            />
+            <div className="rounded-lg border border-blue-gray-100 bg-gray-50 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <Typography className="text-sm font-medium text-gray-800">
+                  Trạng thái
+                </Typography>
+                <Typography
+                  className={`text-sm font-semibold ${
+                    form.status === "Đang làm"
+                      ? "text-green-700"
+                      : "text-red-700"
+                  }`}
+                >
+                  {form.status}
+                </Typography>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleEmployeeStatus}
+                className={`relative h-9 w-20 rounded-full p-1 transition ${
+                  form.status === "Đang làm" ? "bg-green-500" : "bg-red-500"
+                }`}
+                aria-label="Đổi trạng thái nhân viên"
+              >
+                <span
+                  className={`block h-7 w-7 rounded-full bg-white shadow transition-transform ${
+                    form.status === "Đang làm"
+                      ? "translate-x-11"
+                      : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
 
             <Button
               onClick={handleCreate}
               fullWidth
-              className="bg-green-600 hover:bg-green-700 rounded-lg"
+              className="rounded-lg bg-green-600 hover:bg-green-700"
             >
               Lưu nhân viên
             </Button>

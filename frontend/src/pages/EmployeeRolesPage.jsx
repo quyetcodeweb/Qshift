@@ -13,8 +13,10 @@ import {
   DialogFooter,
 } from "@material-tailwind/react";
 import axios from "axios";
+import { useLocation } from "react-router-dom";
 
 export default function EmployeeRolesPage() {
+  const location = useLocation();
   const [employees, setEmployees] = useState([]);
   const [roles, setRoles] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState("");
@@ -25,6 +27,8 @@ export default function EmployeeRolesPage() {
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#3B82F6");
   const [creatingRole, setCreatingRole] = useState(false);
+  const roleReminder = location.state?.message;
+  const createdEmployeeId = location.state?.employeeId;
 
   const COLORS = [
     { name: "Xanh", value: "#3B82F6" },
@@ -40,13 +44,16 @@ export default function EmployeeRolesPage() {
   useEffect(() => {
     fetchEmployees();
     fetchRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchEmployees = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/employees");
       setEmployees(res.data);
-      if (res.data.length > 0) {
+      if (createdEmployeeId) {
+        setSelectedEmployee(String(createdEmployeeId));
+      } else if (res.data.length > 0) {
         setSelectedEmployee(String(res.data[0].employee_id));
       }
     } catch (err) {
@@ -75,6 +82,7 @@ export default function EmployeeRolesPage() {
     if (selectedEmployee) {
       fetchEmployeeRoles();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmployee]);
 
   const fetchEmployeeRoles = async () => {
@@ -182,6 +190,12 @@ export default function EmployeeRolesPage() {
       <Typography variant="h4" className="mb-6 font-bold">
         👥 Quản Lý Vai Trò Nhân Viên
       </Typography>
+
+      {roleReminder && (
+        <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          {roleReminder}
+        </div>
+      )}
 
       <div className="mb-4">
         <Button

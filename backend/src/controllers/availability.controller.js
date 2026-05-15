@@ -31,7 +31,7 @@ export const getAvailability = async (req, res) => {
 export const requestAvailability = async (req, res) => {
   try {
     const user_id = req.user?.user_id; // JWT
-    const { month, year, data } = req.body;
+    const { month, year, data = [] } = req.body;
 
     console.log("📤 Request availability:", { user_id, month, year, dataLen: data?.length });
 

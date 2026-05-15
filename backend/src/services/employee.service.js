@@ -36,7 +36,7 @@ export const createEmployee = async (data) => {
     const user_id = userResult.insertId;
 
     // 2. tạo employee
-    await conn.query(
+    const [employeeResult] = await conn.query(
       `INSERT INTO employees 
       (user_id, name, email, phone, hourly_rate, hire_date, status)
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -46,6 +46,7 @@ export const createEmployee = async (data) => {
     await conn.commit();
 
     return {
+      employee_id: employeeResult.insertId,
       user_id,
       username,
       rawPassword, // trả về để test (sau này nên bỏ)

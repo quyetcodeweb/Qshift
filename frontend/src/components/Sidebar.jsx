@@ -37,7 +37,17 @@ export default function Sidebar() {
   const [open, setOpen] = React.useState(0);
   const role = getRole();
   const [count, setCount] = React.useState(0);
+  const [availabilityAccess, setAvailabilityAccess] = React.useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("availabilityFillRequest"));
+    } catch {
+      return null;
+    }
+  });
   const isActive = (path) => location.pathname === path;
+  const showAvailabilityLink =
+    role === "ADMIN" ||
+    Boolean(availabilityAccess?.month && availabilityAccess?.year);
   const isPayrollTab = (tab) =>
     location.pathname === "/payroll" &&
     new URLSearchParams(location.search).get("tab") === tab;
@@ -73,6 +83,40 @@ export default function Sidebar() {
 
   React.useEffect(() => {
     fetchNoti();
+
+    const intervalId = window.setInterval(fetchNoti, 15000);
+    window.addEventListener("notification-count-changed", fetchNoti);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("notification-count-changed", fetchNoti);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const refreshAvailabilityAccess = () => {
+      try {
+        setAvailabilityAccess(
+          JSON.parse(localStorage.getItem("availabilityFillRequest")),
+        );
+      } catch {
+        setAvailabilityAccess(null);
+      }
+    };
+
+    window.addEventListener(
+      "availability-access-changed",
+      refreshAvailabilityAccess,
+    );
+    window.addEventListener("storage", refreshAvailabilityAccess);
+
+    return () => {
+      window.removeEventListener(
+        "availability-access-changed",
+        refreshAvailabilityAccess,
+      );
+      window.removeEventListener("storage", refreshAvailabilityAccess);
+    };
   }, []);
   const baseItem =
     "py-2 px-1 text-sm font-medium transition-all duration-200 flex items-center gap-1";
@@ -245,7 +289,20 @@ export default function Sidebar() {
                     </ListItem>
                   </Link>
                 )}
-                <Link to="/availabilityPage" className="no-underline block">
+                {role === "ADMIN" && (
+                  <Link to="/shiftSwaps" className="no-underline block">
+                    <ListItem
+                      className={`${baseItem} ${hoverItem} pl-10 ${
+                        isActive("/shiftSwaps") ? activeItem : ""
+                      }`}
+                    >
+                      <ChevronRightIcon className="h-3 w-3 opacity-70" />
+                      Quản lý đổi ca
+                    </ListItem>
+                  </Link>
+                )}
+                {showAvailabilityLink && (
+                  <Link to="/availabilityPage" className="no-underline block">
                   <ListItem
                     className={`${baseItem} ${hoverItem} pl-10 ${
                       isActive("/availabilityPage") ? activeItem : ""
@@ -254,7 +311,8 @@ export default function Sidebar() {
                     <ChevronRightIcon className="h-3 w-3 opacity-70" />
                     Thời gian rảnh
                   </ListItem>
-                </Link>
+                  </Link>
+                )}
               </List>
             </AccordionBody>
           </Accordion>

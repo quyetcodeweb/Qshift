@@ -20,6 +20,10 @@ export const login = async (req, res) => {
 
   const user = rows[0];
 
+  if (!user.status) {
+    return res.status(403).json({ message: "Tài khoản đã bị vô hiệu hóa" });
+  }
+
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {

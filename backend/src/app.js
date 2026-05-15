@@ -11,6 +11,7 @@ import scheduleRoutes from "./routes/schedule.routes.js";
 import rolesRoutes from "./routes/roles.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import payrollRoutes from "./routes/payroll.routes.js";
+import shiftSwapRoutes from "./routes/shiftSwap.routes.js";
 import { runMigrations } from "./utils/migrate.js";
 import { scanMissingAttendanceNotifications } from "./controllers/attendance.controller.js";
 dotenv.config();
@@ -30,6 +31,7 @@ app.use("/api/schedules", scheduleRoutes);
 app.use("/api/roles", rolesRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/payroll", payrollRoutes);
+app.use("/api/shift-swaps", shiftSwapRoutes);
 
 // Run migrations on startup
 await runMigrations();

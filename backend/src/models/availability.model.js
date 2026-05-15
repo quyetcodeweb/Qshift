@@ -141,3 +141,54 @@ export const createNotification = async (
     [user_id, message, type, ref_id]
   );
 };
+
+export const createFillRequests = async (month, year) => {
+  const [employees] = await db.query(
+    `SELECT u.user_id, e.employee_id
+     FROM users u
+     JOIN employees e ON e.user_id = u.user_id
+     WHERE u.role='EMPLOYEE' AND u.status = 1`
+  );
+
+  const requests = [];
+
+  for (const employee of employees) {
+    const [availability] = await db.query(
+      `SELECT DATE_FORMAT(work_date, '%Y-%m-%d') as date, shift_id
+       FROM employee_availability
+       WHERE employee_id=?
+       AND MONTH(work_date)=?
+       AND YEAR(work_date)=?`,
+      [employee.employee_id, month, year]
+    );
+
+    const [result] = await db.query(
+      `INSERT INTO availability_requests (user_id, employee_id, month, year, data)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        employee.user_id,
+        employee.employee_id,
+        month,
+        year,
+        JSON.stringify(availability),
+      ]
+    );
+
+    requests.push({
+      request_id: result.insertId,
+      user_id: employee.user_id,
+      employee_id: employee.employee_id,
+    });
+  }
+
+  return requests;
+};
+
+export const getEmployeeByUserId = async (user_id) => {
+  const [rows] = await db.query(
+    "SELECT employee_id, name FROM employees WHERE user_id=?",
+    [user_id]
+  );
+
+  return rows[0];
+};

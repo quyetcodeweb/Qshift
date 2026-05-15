@@ -5,17 +5,29 @@ export const getUsers = async (req, res) => {
 };
 
 export const updateUser = async (req, res) => {
-  await userService.updateUser(req.params.id, req.body);
-  res.json({ message: "Updated" });
+  try {
+    await userService.updateUser(req.params.id, req.body);
+    res.json({ message: "Updated" });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
 };
 
 export const deleteUser = async (req, res) => {
-  await userService.deleteUser(req.params.id);
-  res.json({ message: "Deleted" });
+  try {
+    await userService.deleteUser(req.params.id);
+    res.json({ message: "Deleted" });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
 };
 
 export const toggleUserStatus = async (req, res) => {
-  const { status } = req.body;
-  await userService.toggleUserStatus(req.params.id, status);
-  res.json({ message: "Status updated" });
+  try {
+    const { status } = req.body;
+    await userService.toggleUserStatus(req.params.id, status);
+    res.json({ message: "Status updated" });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
 };

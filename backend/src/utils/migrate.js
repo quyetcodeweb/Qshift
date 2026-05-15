@@ -283,6 +283,46 @@ export const runMigrations = async () => {
       console.warn("Could not ensure payroll_feedback table:", e.message);
     }
 
+    // Ensure shift swap requests table exists
+    try {
+      const [shiftSwapTable] = await db.query(
+        `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
+         WHERE TABLE_NAME='shift_swap_requests' AND TABLE_SCHEMA=DATABASE()`
+      );
+
+      if (shiftSwapTable.length === 0) {
+        console.log("Running migration: Create shift_swap_requests table...");
+        await db.query(`
+          CREATE TABLE IF NOT EXISTS shift_swap_requests (
+            swap_request_id INT AUTO_INCREMENT PRIMARY KEY,
+            requester_employee_id INT NOT NULL,
+            target_employee_id INT NOT NULL,
+            requester_schedule_id INT NOT NULL,
+            target_schedule_id INT NOT NULL,
+            status VARCHAR(40) NOT NULL DEFAULT 'PENDING_TARGET',
+            requester_note TEXT,
+            target_response_at TIMESTAMP NULL,
+            admin_cancel_reason TEXT,
+            admin_cancelled_at TIMESTAMP NULL,
+            admin_revert_reason TEXT,
+            admin_reverted_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (requester_employee_id) REFERENCES employees(employee_id),
+            FOREIGN KEY (target_employee_id) REFERENCES employees(employee_id),
+            FOREIGN KEY (requester_schedule_id) REFERENCES schedules(schedule_id),
+            FOREIGN KEY (target_schedule_id) REFERENCES schedules(schedule_id),
+            INDEX idx_shift_swap_status (status),
+            INDEX idx_shift_swap_requester (requester_employee_id),
+            INDEX idx_shift_swap_target (target_employee_id)
+          )
+        `);
+        console.log("Created shift_swap_requests table");
+      }
+    } catch (e) {
+      console.warn("Could not ensure shift_swap_requests table:", e.message);
+    }
+
   } catch (err) {
     console.error("❌ Migration error:", err.message);
     // Don't throw - app can continue even if migration fails
