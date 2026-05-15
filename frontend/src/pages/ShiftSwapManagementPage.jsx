@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-
-const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
+import { API_URL } from "../services/api";
 
 const statusText = {
   PENDING_TARGET: "Chờ người nhận xác nhận",

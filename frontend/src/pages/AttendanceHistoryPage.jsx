@@ -10,8 +10,7 @@ import {
   Typography,
 } from "@material-tailwind/react";
 import { getRole } from "../utils/auth";
-
-const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
+import { API_URL } from "../services/api";
 
 function authHeaders() {
   const token = localStorage.getItem("token");

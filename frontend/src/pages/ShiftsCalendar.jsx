@@ -5,8 +5,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import axios from "axios";
 import { getRole } from "../utils/auth";
-
-const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
+import { API_URL } from "../services/api";
 
 const transformToCalendarEvents = (schedules) => {
   return schedules
@@ -380,8 +379,10 @@ export default function ShiftsCalendar() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-4 shadow">
-        <h1 className="text-2xl font-bold">📅 Lịch Làm Việc</h1>
+      <div className="flex flex-col gap-3 rounded-lg bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold text-gray-900 md:text-2xl">
+          Lich lam viec
+        </h1>
         {role === "EMPLOYEE" && (
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1">
             <button
@@ -407,7 +408,7 @@ export default function ShiftsCalendar() {
       {activeTab === "swap" && role === "EMPLOYEE" ? (
         <EmployeeSwapTab />
       ) : (
-        <div className="rounded-xl bg-white p-4 shadow">
+        <div className="overflow-hidden rounded-lg bg-white p-2 shadow-sm md:p-4">
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
@@ -417,7 +418,8 @@ export default function ShiftsCalendar() {
               right: "dayGridMonth,timeGridWeek,timeGridDay",
             }}
             events={events}
-            height="80vh"
+            height="auto"
+            contentHeight="auto"
             eventDisplay="block"
             datesSet={(arg) => {
               const year = arg.view.currentStart.getFullYear();

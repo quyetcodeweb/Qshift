@@ -13,8 +13,7 @@ import {
   ClockIcon,
 } from "@heroicons/react/24/solid";
 import { getRole } from "../utils/auth";
-
-const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
+import { API_URL } from "../services/api";
 
 function authHeaders() {
   const token = localStorage.getItem("token");
@@ -139,7 +138,7 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <Typography variant="h4" className="font-bold text-gray-900">
@@ -204,7 +203,98 @@ export default function AttendancePage() {
             Hôm nay chưa có ca làm được công bố.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="space-y-3 p-3 md:hidden">
+            {records.map((record) => {
+              const chip = statusChip(record);
+              const checkInVisible = !isAdmin && canCheckIn(record);
+              const checkOutVisible = !isAdmin && canCheckOut(record);
+              const actionKey = checkInVisible ? "check_in" : "check_out";
+              const isBusy =
+                actionLoading === `${record.schedule_id}-${actionKey}`;
+
+              return (
+                <div
+                  key={record.schedule_id}
+                  className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-gray-900">
+                        {record.shift_name}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {record.start_time?.slice(0, 5)} -{" "}
+                        {record.end_time?.slice(0, 5)}
+                      </div>
+                    </div>
+                    <Chip
+                      value={chip.label}
+                      color={chip.color}
+                      size="sm"
+                      className="shrink-0"
+                    />
+                  </div>
+
+                  {isAdmin && (
+                    <div className="mt-3 text-sm text-gray-700">
+                      <div className="font-medium">{record.employee_name}</div>
+                      <div className="truncate text-gray-500">{record.email || "-"}</div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-md bg-gray-50 p-3">
+                      <div className="text-gray-500">Chấm vào</div>
+                      <div className="font-semibold text-gray-900">
+                        {formatTime(record.check_in)}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 p-3">
+                      <div className="text-gray-500">Chấm ra</div>
+                      <div className="font-semibold text-gray-900">
+                        {formatTime(record.check_out)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isAdmin && (
+                    <div className="mt-4">
+                      {checkInVisible && (
+                        <Button
+                          fullWidth
+                          className="flex items-center justify-center gap-2 bg-blue-600"
+                          disabled={isBusy}
+                          onClick={() => markAttendance(record.schedule_id, "check_in")}
+                        >
+                          <ClockIcon className="h-4 w-4" />
+                          Chấm công vào
+                        </Button>
+                      )}
+                      {checkOutVisible && (
+                        <Button
+                          fullWidth
+                          className="flex items-center justify-center gap-2 bg-green-600"
+                          disabled={isBusy}
+                          onClick={() => markAttendance(record.schedule_id, "check_out")}
+                        >
+                          <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                          Chấm công ra
+                        </Button>
+                      )}
+                      {!checkInVisible && !checkOutVisible && (
+                        <div className="flex items-center gap-2 rounded-md bg-gray-50 p-3 text-sm text-gray-500">
+                          <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                          Chưa đến thời điểm thao tác
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[840px] text-left">
               <thead>
                 <tr className="bg-gray-900 text-white">
@@ -286,6 +376,7 @@ export default function AttendancePage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </div>

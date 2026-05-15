@@ -245,8 +245,8 @@ export default function NotificationPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold">Thông báo</h2>
         {data.some((n) => !n.is_read) && (
           <button
@@ -281,12 +281,12 @@ export default function NotificationPage() {
               }
               markRead(n.notification_id);
             }}
-            className={`p-4 mb-2 rounded-lg cursor-pointer ${
+            className={`rounded-lg p-4 cursor-pointer ${
               n.is_read ? "bg-gray-100" : "bg-blue-100"
             }`}
           >
-            <div className="flex justify-between">
-              <div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+              <div className="min-w-0">
                 <p>{n.message}</p>
                 {n.employee_name && n.month && n.year && (
                   <p className="text-sm text-gray-600 mt-1">
@@ -294,7 +294,7 @@ export default function NotificationPage() {
                   </p>
                 )}
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="shrink-0 text-sm text-gray-500">
                 {new Date(n.created_at).toLocaleString()}
               </p>
             </div>

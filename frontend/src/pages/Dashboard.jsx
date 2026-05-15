@@ -75,8 +75,8 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <Typography variant="h4" className="mb-6 font-bold">
+    <div className="space-y-5">
+      <Typography variant="h4" className="font-bold text-gray-900">
         📊 Tổng Quan
       </Typography>
 
@@ -88,8 +88,8 @@ export default function Dashboard() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Card className="p-6 bg-white shadow-sm">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+        <Card className="p-4 bg-white shadow-sm md:p-6">
           <Typography className="text-gray-600 text-sm">
             Tổng Nhân Viên
           </Typography>
@@ -98,14 +98,14 @@ export default function Dashboard() {
           </Typography>
         </Card>
 
-        <Card className="p-6 bg-white shadow-sm">
+        <Card className="p-4 bg-white shadow-sm md:p-6">
           <Typography className="text-gray-600 text-sm">Tổng Ca Làm</Typography>
           <Typography variant="h5" className="mt-2 font-bold text-blue-600">
             {totalStats.shifts}
           </Typography>
         </Card>
 
-        <Card className="p-6 bg-white shadow-sm">
+        <Card className="p-4 bg-white shadow-sm md:p-6">
           <Typography className="text-gray-600 text-sm">
             Tổng Giờ Làm
           </Typography>
@@ -114,7 +114,7 @@ export default function Dashboard() {
           </Typography>
         </Card>
 
-        <Card className="p-6 bg-white shadow-sm">
+        <Card className="p-4 bg-white shadow-sm md:p-6">
           <Typography className="text-gray-600 text-sm">
             Trung Bình/Người
           </Typography>
@@ -128,14 +128,14 @@ export default function Dashboard() {
       </div>
 
       {/* Filter Controls */}
-      <Card className="p-6 mb-8 bg-white shadow-sm">
+      <Card className="p-4 bg-white shadow-sm md:p-6">
         <Typography variant="h6" className="mb-4 font-semibold">
           🔍 Bộ Lọc
         </Typography>
 
         <div className="space-y-4">
           {/* Filter Mode Toggle */}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button
               size="sm"
               variant={filterMode === "month" ? "filled" : "outlined"}
@@ -156,8 +156,8 @@ export default function Dashboard() {
 
           {/* Month/Year Filter */}
           {filterMode === "month" && (
-            <div className="flex gap-4 flex-wrap">
-              <div style={{ minWidth: "150px" }}>
+            <div className="grid gap-3 sm:grid-cols-[150px_150px_auto] sm:items-end">
+              <div>
                 <Select
                   label="Tháng"
                   value={String(month)}
@@ -171,7 +171,7 @@ export default function Dashboard() {
                 </Select>
               </div>
 
-              <div style={{ minWidth: "150px" }}>
+              <div>
                 <Select
                   label="Năm"
                   value={String(year)}
@@ -239,7 +239,8 @@ export default function Dashboard() {
 
       {/* Rankings Table */}
       <Card className="overflow-hidden shadow-sm bg-white">
-        <table className="w-full text-left">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[880px] text-left">
           <thead>
             <tr className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
               <th className="p-4 font-semibold">🏆 Xếp Hạng</th>
@@ -340,6 +341,7 @@ export default function Dashboard() {
             )}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {/* Footer Stats */}

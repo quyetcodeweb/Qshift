@@ -40,8 +40,8 @@ export default function Login() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-100">
-      <Card className="w-96 p-6 shadow-lg">
+    <div className="flex min-h-dvh items-center justify-center bg-slate-100 px-4 py-8">
+      <Card className="w-full max-w-sm p-6 shadow-lg">
         <Typography variant="h4" className="mb-6 text-center">
           Đăng nhập QShift
         </Typography>
