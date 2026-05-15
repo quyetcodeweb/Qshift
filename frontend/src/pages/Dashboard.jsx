@@ -7,6 +7,7 @@ import {
   Option,
 } from "@material-tailwind/react";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 export default function Dashboard() {
   const [stats, setStats] = useState([]);
@@ -43,7 +44,7 @@ export default function Dashboard() {
 
       console.log("[Dashboard] Fetching stats with params:", params);
 
-      const res = await axios.get("http://localhost:5000/api/schedules/stats", {
+      const res = await axios.get(`${API_URL}/schedules/stats`, {
         params,
         headers: { Authorization: `Bearer ${token}` },
       });

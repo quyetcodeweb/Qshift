@@ -6,7 +6,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import axios from "axios";
 import { getRole } from "../utils/auth";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "")}/api`;
 
 const transformToCalendarEvents = (schedules) => {
   return schedules

@@ -13,6 +13,7 @@ import AddShiftModal from "../components/AddShiftModal";
 import EditShiftModal from "../components/EditShiftModal";
 import ScheduleSettingsModal from "../components/ScheduleSettingsModal";
 import AutoScheduleModal from "../components/AutoScheduleModal";
+import { API_URL } from "../services/api";
 
 export default function CreateSchedule() {
   const [schedules, setSchedules] = useState([]);
@@ -51,7 +52,7 @@ export default function CreateSchedule() {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get(
-          `http://localhost:5000/api/schedules/current?month=${month}&year=${year}`,
+          `${API_URL}/schedules/current?month=${month}&year=${year}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           },
@@ -101,7 +102,7 @@ export default function CreateSchedule() {
 
   const fetchShifts = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/shifts");
+      const res = await axios.get(`${API_URL}/shifts`);
       setShifts(res.data);
     } catch (err) {
       console.error("Error fetching shifts:", err);
@@ -111,7 +112,7 @@ export default function CreateSchedule() {
   const fetchEmployees = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/employees", {
+      const res = await axios.get(`${API_URL}/employees`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEmployees(res.data);
@@ -124,7 +125,7 @@ export default function CreateSchedule() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        "http://localhost:5000/api/schedules/settings",
+        `${API_URL}/schedules/settings`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -141,7 +142,7 @@ export default function CreateSchedule() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/api/schedules",
+        `${API_URL}/schedules`,
         {
           ...data,
           status: "PUBLISHED",
@@ -163,7 +164,7 @@ export default function CreateSchedule() {
   const handleEditShift = async (id, data) => {
     try {
       const token = localStorage.getItem("token");
-      await axios.put(`http://localhost:5000/api/schedules/${id}`, data, {
+      await axios.put(`${API_URL}/schedules/${id}`, data, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setOpenEditModal(false);
@@ -181,7 +182,7 @@ export default function CreateSchedule() {
     if (confirm("Bạn chắc chắn muốn xóa ca này?")) {
       try {
         const token = localStorage.getItem("token");
-        await axios.delete(`http://localhost:5000/api/schedules/${id}`, {
+        await axios.delete(`${API_URL}/schedules/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setSelectedScheduleIds((prev) =>
@@ -236,7 +237,7 @@ export default function CreateSchedule() {
       const token = localStorage.getItem("token");
       await Promise.all(
         selectedScheduleIds.map((id) =>
-          axios.delete(`http://localhost:5000/api/schedules/${id}`, {
+          axios.delete(`${API_URL}/schedules/${id}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ),
@@ -254,7 +255,7 @@ export default function CreateSchedule() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/api/schedules/settings",
+        `${API_URL}/schedules/settings`,
         settings,
         {
           headers: { Authorization: `Bearer ${token}` },

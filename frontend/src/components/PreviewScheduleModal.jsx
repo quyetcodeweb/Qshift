@@ -8,6 +8,7 @@ import {
   Alert,
 } from "@material-tailwind/react";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 export default function PreviewScheduleModal({
   open,
@@ -41,7 +42,7 @@ export default function PreviewScheduleModal({
       }));
 
       const res = await axios.post(
-        "http://localhost:5000/api/schedules/save-draft",
+        `${API_URL}/schedules/save-draft`,
         {
           month: schedule.month,
           year: schedule.year,
@@ -92,7 +93,7 @@ export default function PreviewScheduleModal({
 
       console.log("[handlePublish] Sending to API...");
       const res = await axios.post(
-        "http://localhost:5000/api/schedules/publish",
+        `${API_URL}/schedules/publish`,
         {
           month: schedule.month,
           year: schedule.year,

@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 const defaultForm = {
   status: "Đang làm",
@@ -22,7 +23,7 @@ export default function EmployeePage() {
   const [form, setForm] = useState(defaultForm);
 
   const fetchEmployees = async () => {
-    const res = await axios.get("http://localhost:5000/api/employees");
+    const res = await axios.get(`${API_URL}/employees`);
     setEmployees(res.data);
   };
 
@@ -32,7 +33,7 @@ export default function EmployeePage() {
   }, []);
 
   const handleCreate = async () => {
-    const res = await axios.post("http://localhost:5000/api/employees", form);
+    const res = await axios.post(`${API_URL}/employees`, form);
     const employeeId = res.data?.employee?.employee_id;
 
     setOpen(false);

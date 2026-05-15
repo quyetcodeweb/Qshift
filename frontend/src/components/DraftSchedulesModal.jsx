@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from "@material-tailwind/react";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 export default function DraftSchedulesModal({ open, onClose }) {
   const [drafts, setDrafts] = useState([]);
@@ -31,7 +32,7 @@ export default function DraftSchedulesModal({ open, onClose }) {
       setLoading(true);
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        "http://localhost:5000/api/schedules/drafts/list",
+        `${API_URL}/schedules/drafts/list`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -54,7 +55,7 @@ export default function DraftSchedulesModal({ open, onClose }) {
 
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        `http://localhost:5000/api/schedules/drafts/${draft.draft_id}`,
+        `${API_URL}/schedules/drafts/${draft.draft_id}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -74,7 +75,7 @@ export default function DraftSchedulesModal({ open, onClose }) {
     try {
       const token = localStorage.getItem("token");
       await axios.delete(
-        `http://localhost:5000/api/schedules/drafts/${draftId}`,
+        `${API_URL}/schedules/drafts/${draftId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -105,7 +106,7 @@ export default function DraftSchedulesModal({ open, onClose }) {
       }));
 
       await axios.post(
-        "http://localhost:5000/api/schedules/publish",
+        `${API_URL}/schedules/publish`,
         {
           month: selectedDraft.month,
           year: selectedDraft.year,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { Card, Input, Button, Typography } from "@material-tailwind/react";
+import { API_URL } from "../services/api";
 
 export default function Login() {
   const [form, setForm] = useState({
@@ -17,7 +18,7 @@ export default function Login() {
       setError("");
 
       const res = await axios.post(
-        "http://localhost:5000/api/auth/login",
+        `${API_URL}/auth/login`,
         form,
       );
 

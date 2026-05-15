@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 const ACCESS_KEY = "availabilityFillRequest";
 
@@ -62,8 +63,8 @@ export default function AvailabilityPage() {
     try {
       setLoadingEmployees(true);
       const [empRes, shiftRes] = await Promise.all([
-        axios.get("http://localhost:5000/api/employees"),
-        axios.get("http://localhost:5000/api/shifts"),
+        axios.get(`${API_URL}/employees`),
+        axios.get(`${API_URL}/shifts`),
       ]);
 
       setEmployees(empRes.data);
@@ -153,7 +154,7 @@ export default function AvailabilityPage() {
     try {
       setLoading(true);
       const res = await axios.get(
-        `http://localhost:5000/api/availability/${employeeId}?month=${month}&year=${year}`,
+        `${API_URL}/availability/${employeeId}?month=${month}&year=${year}`,
       );
 
       const fallbackAvailability = Array.isArray(employeeAccess?.availability)
@@ -215,7 +216,7 @@ export default function AvailabilityPage() {
         const token = localStorage.getItem("token");
 
         await axios.post(
-          "http://localhost:5000/api/availability/request",
+          `${API_URL}/availability/request`,
           {
             month,
             year,
@@ -235,7 +236,7 @@ export default function AvailabilityPage() {
         return;
       }
 
-      await axios.post("http://localhost:5000/api/availability", {
+      await axios.post(`${API_URL}/availability`, {
         employee_id: Number(employeeId),
         availability,
       });
@@ -250,7 +251,7 @@ export default function AvailabilityPage() {
 
   const sendFillRequest = async () => {
     try {
-      const res = await axios.post("http://localhost:5000/api/notifications/send", {
+      const res = await axios.post(`${API_URL}/notifications/send`, {
         month,
         year,
       });

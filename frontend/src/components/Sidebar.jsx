@@ -12,6 +12,7 @@ import {
   Input,
   Button,
 } from "@material-tailwind/react";
+import { API_URL } from "../services/api";
 
 import {
   PresentationChartBarIcon,
@@ -65,7 +66,7 @@ export default function Sidebar() {
         return;
       }
 
-      const res = await axios.get("http://localhost:5000/api/notifications", {
+      const res = await axios.get(`${API_URL}/notifications`, {
         headers: {
           "user-id": userId,
         },

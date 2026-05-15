@@ -16,6 +16,7 @@ import {
 } from "@material-tailwind/react";
 import axios from "axios";
 import DraftSchedulesModal from "./DraftSchedulesModal";
+import { API_URL } from "../services/api";
 
 const DAYS_OF_WEEK = [
   "Thứ 2",
@@ -100,7 +101,7 @@ export default function AutoScheduleModal({
 
   const fetchShifts = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/shifts");
+      const res = await axios.get(`${API_URL}/shifts`);
       setShifts(res.data);
       fetchShiftRoleRequirements(res.data);
       console.log("[fetchShifts] Got", res.data.length, "shifts");
@@ -114,7 +115,7 @@ export default function AutoScheduleModal({
       const token = localStorage.getItem("token");
       const responses = await Promise.all(
         shiftList.map((shift) =>
-          axios.get(`http://localhost:5000/api/roles/shift/${shift.shift_id}`, {
+          axios.get(`${API_URL}/roles/shift/${shift.shift_id}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ),
@@ -140,7 +141,7 @@ export default function AutoScheduleModal({
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        `http://localhost:5000/api/schedules/availability/${month}/${year}`,
+        `${API_URL}/schedules/availability/${month}/${year}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -161,7 +162,7 @@ export default function AutoScheduleModal({
   const fetchRoles = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/roles", {
+      const res = await axios.get(`${API_URL}/roles`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRoles(res.data);
@@ -175,7 +176,7 @@ export default function AutoScheduleModal({
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        "http://localhost:5000/api/schedules/drafts",
+        `${API_URL}/schedules/drafts`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -450,7 +451,7 @@ export default function AutoScheduleModal({
       });
 
       const response = await axios.post(
-        "http://localhost:5000/api/schedules/auto-generate",
+        `${API_URL}/schedules/auto-generate`,
         {
           month,
           year,
@@ -492,7 +493,7 @@ export default function AutoScheduleModal({
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/api/schedules/publish`,
+        `${API_URL}/schedules/publish`,
         { schedule_id: draftId },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -510,7 +511,7 @@ export default function AutoScheduleModal({
       try {
         const token = localStorage.getItem("token");
         await axios.delete(
-          `http://localhost:5000/api/schedules/draft/${draftId}`,
+          `${API_URL}/schedules/draft/${draftId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           },
@@ -538,7 +539,7 @@ export default function AutoScheduleModal({
       const token = localStorage.getItem("token");
 
       const response = await axios.post(
-        "http://localhost:5000/api/schedules/drafts",
+        `${API_URL}/schedules/drafts`,
         {
           name: draftName,
           month,
@@ -592,7 +593,7 @@ export default function AutoScheduleModal({
       }));
 
       await axios.post(
-        "http://localhost:5000/api/schedules/publish",
+        `${API_URL}/schedules/publish`,
         {
           month,
           year,

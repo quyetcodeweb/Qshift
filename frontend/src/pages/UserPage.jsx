@@ -11,6 +11,7 @@ import {
 } from "@material-tailwind/react";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../services/api";
 
 export default function UserPage() {
   const [users, setUsers] = useState([]);
@@ -22,7 +23,7 @@ export default function UserPage() {
     selectedUser?.role === "ADMIN" && adminCount <= 1;
 
   const fetchUsers = async () => {
-    const res = await axios.get("http://localhost:5000/api/users");
+    const res = await axios.get(`${API_URL}/users`);
     setUsers(res.data);
   };
 
@@ -39,7 +40,7 @@ export default function UserPage() {
     }
 
     try {
-      await axios.delete(`http://localhost:5000/api/users/${user.user_id}`);
+      await axios.delete(`${API_URL}/users/${user.user_id}`);
       fetchUsers();
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa tài khoản");
@@ -54,7 +55,7 @@ export default function UserPage() {
 
     try {
       await axios.patch(
-        `http://localhost:5000/api/users/${user.user_id}/status`,
+        `${API_URL}/users/${user.user_id}/status`,
         { status: !user.status },
       );
       fetchUsers();
@@ -77,7 +78,7 @@ export default function UserPage() {
   const handleUpdate = async () => {
     try {
       await axios.put(
-        `http://localhost:5000/api/users/${selectedUser.user_id}`,
+        `${API_URL}/users/${selectedUser.user_id}`,
         form,
       );
       setOpen(false);

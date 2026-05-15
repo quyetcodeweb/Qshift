@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getRole } from "../utils/auth";
+import { API_URL } from "../services/api";
 
 export default function NotificationPage() {
   const [data, setData] = useState([]);
@@ -26,7 +27,7 @@ export default function NotificationPage() {
         return;
       }
 
-      const res = await axios.get("http://localhost:5000/api/notifications", {
+      const res = await axios.get(`${API_URL}/notifications`, {
         headers: { "user-id": userId },
       });
 
@@ -53,7 +54,7 @@ export default function NotificationPage() {
       const item = data.find((n) => n.notification_id === id);
       if (item?.is_read) return;
 
-      await axios.patch(`http://localhost:5000/api/notifications/${id}`);
+      await axios.patch(`${API_URL}/notifications/${id}`);
       setData((prev) =>
         prev.map((n) =>
           n.notification_id === id ? { ...n, is_read: 1 } : n,
@@ -72,7 +73,7 @@ export default function NotificationPage() {
 
       if (!userId) return;
 
-      await axios.patch("http://localhost:5000/api/notifications/read-all", null, {
+      await axios.patch(`${API_URL}/notifications/read-all`, null, {
         headers: { "user-id": userId },
       });
 
@@ -87,7 +88,7 @@ export default function NotificationPage() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/api/availability/approve/${id}`,
+        `${API_URL}/availability/approve/${id}`,
         {},
         {
           headers: {
@@ -107,7 +108,7 @@ export default function NotificationPage() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/api/availability/reject/${id}`,
+        `${API_URL}/availability/reject/${id}`,
         {},
         {
           headers: {
@@ -127,7 +128,7 @@ export default function NotificationPage() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/api/shift-swaps/${id}/respond`,
+        `${API_URL}/shift-swaps/${id}/respond`,
         { action },
         {
           headers: {
@@ -154,7 +155,7 @@ export default function NotificationPage() {
       }
 
       await axios.post(
-        `http://localhost:5000/api/shift-swaps/${id}/${action}`,
+        `${API_URL}/shift-swaps/${id}/${action}`,
         { reason },
         {
           headers: {
@@ -182,7 +183,7 @@ export default function NotificationPage() {
       const reply = replyById[feedbackId] || "";
 
       await axios.post(
-        `http://localhost:5000/api/payroll/feedback/${feedbackId}/respond`,
+        `${API_URL}/payroll/feedback/${feedbackId}/respond`,
         { action, reply },
         {
           headers: {
@@ -202,7 +203,7 @@ export default function NotificationPage() {
   const openAvailabilityFill = async (notification) => {
     try {
       await axios.patch(
-        `http://localhost:5000/api/notifications/${notification.notification_id}`,
+        `${API_URL}/notifications/${notification.notification_id}`,
       );
 
       setData((prev) =>

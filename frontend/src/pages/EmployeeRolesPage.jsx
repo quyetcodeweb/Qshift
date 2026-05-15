@@ -14,6 +14,7 @@ import {
 } from "@material-tailwind/react";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
+import { API_URL } from "../services/api";
 
 export default function EmployeeRolesPage() {
   const location = useLocation();
@@ -49,7 +50,7 @@ export default function EmployeeRolesPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/employees");
+      const res = await axios.get(`${API_URL}/employees`);
       setEmployees(res.data);
       if (createdEmployeeId) {
         setSelectedEmployee(String(createdEmployeeId));
@@ -64,7 +65,7 @@ export default function EmployeeRolesPage() {
   const fetchRoles = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/roles", {
+      const res = await axios.get(`${API_URL}/roles`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("[EmployeeRolesPage] Fetched roles:", res.data);
@@ -89,7 +90,7 @@ export default function EmployeeRolesPage() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        `http://localhost:5000/api/roles/employee/${selectedEmployee}`,
+        `${API_URL}/roles/employee/${selectedEmployee}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -111,7 +112,7 @@ export default function EmployeeRolesPage() {
       setLoading(true);
       const token = localStorage.getItem("token");
       await axios.post(
-        `http://localhost:5000/api/roles/employee/${selectedEmployee}`,
+        `${API_URL}/roles/employee/${selectedEmployee}`,
         { role_id: Number(selectedRole) },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -134,7 +135,7 @@ export default function EmployeeRolesPage() {
     try {
       const token = localStorage.getItem("token");
       await axios.delete(
-        `http://localhost:5000/api/roles/employee/${selectedEmployee}/${roleId}`,
+        `${API_URL}/roles/employee/${selectedEmployee}/${roleId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -157,7 +158,7 @@ export default function EmployeeRolesPage() {
       setCreatingRole(true);
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        "http://localhost:5000/api/roles",
+        `${API_URL}/roles`,
         {
           role_name: newRoleName.trim(),
           description: newRoleName.trim(),
