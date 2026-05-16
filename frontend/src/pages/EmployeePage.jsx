@@ -158,22 +158,25 @@ export default function EmployeePage() {
     try {
       setLoading(true);
       const headers = authHeaders();
-      const [employeesRes, usersRes, todayRes, rolesRes] = await Promise.all([
+      const [employeesRes, usersRes, todayRes, rolesRes] = await Promise.allSettled([
         axios.get(`${API_URL}/employees`, { headers }),
         axios.get(`${API_URL}/users`, { headers }),
         axios.get(`${API_URL}/attendance/today`, { headers }),
         axios.get(`${API_URL}/roles`, { headers }),
       ]);
 
-      const employeeList = employeesRes.data || [];
+      const employeeList =
+        employeesRes.status === "fulfilled" ? employeesRes.value.data || [] : [];
       setEmployees(employeeList);
-      setUsers(usersRes.data || []);
-      setTodayAttendance(todayRes.data || []);
-      setRoles(rolesRes.data || []);
+      setUsers(usersRes.status === "fulfilled" ? usersRes.value.data || [] : []);
+      setTodayAttendance(todayRes.status === "fulfilled" ? todayRes.value.data || [] : []);
+      setRoles(rolesRes.status === "fulfilled" ? rolesRes.value.data || [] : []);
 
       if (!selectedRoleEmployee && employeeList.length > 0) {
         setSelectedRoleEmployee(String(employeeList[0].employee_id));
       }
+    } catch (err) {
+      console.error("[EmployeePage] Load error:", err);
     } finally {
       setLoading(false);
     }

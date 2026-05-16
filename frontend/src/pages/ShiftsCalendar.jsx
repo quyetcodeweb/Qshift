@@ -513,7 +513,7 @@ export default function ShiftsCalendar() {
       setLoading(true);
       const month = cursorDate.getMonth() + 1;
       const year = cursorDate.getFullYear();
-      const [scheduleRes, attendanceRes] = await Promise.all([
+      const [scheduleRes, attendanceRes] = await Promise.allSettled([
         axios.get(`${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`, {
           headers: authHeaders(),
         }),
@@ -523,8 +523,12 @@ export default function ShiftsCalendar() {
         }),
       ]);
 
-      setSchedules(scheduleRes.data || []);
-      setAttendanceRecords(attendanceRes.data?.records || []);
+      setSchedules(scheduleRes.status === "fulfilled" ? scheduleRes.value.data || [] : []);
+      setAttendanceRecords(
+        attendanceRes.status === "fulfilled"
+          ? attendanceRes.value.data?.records || []
+          : [],
+      );
     } catch (err) {
       console.error("[ShiftsCalendar] Load error:", err);
       setSchedules([]);
