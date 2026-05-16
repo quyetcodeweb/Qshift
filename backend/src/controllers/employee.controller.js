@@ -58,3 +58,23 @@ export const updateEmployee = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+export const deleteEmployee = async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id);
+    const user = req.user;
+
+    if (user?.role !== "ADMIN") {
+      return res.status(403).json({ message: "Chỉ admin có thể xóa nhân viên" });
+    }
+
+    if (!employeeId) {
+      return res.status(400).json({ message: "employee_id không hợp lệ" });
+    }
+
+    await employeeService.deleteEmployee(employeeId);
+    res.json({ message: "Đã xóa nhân viên" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

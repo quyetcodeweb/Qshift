@@ -4,6 +4,7 @@ import {
   createEmployee,
   getEmployees,
   getMyProfile,
+  deleteEmployee,
   updateEmployee,
 } from "../controllers/employee.controller.js";
 
@@ -13,5 +14,6 @@ router.post("/", createEmployee);
 router.get("/", getEmployees);
 router.get("/me", verifyToken, getMyProfile);
 router.put("/:id", verifyToken, updateEmployee);
+router.delete("/:id", verifyToken, deleteEmployee);
 
 export default router;

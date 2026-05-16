@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import db from "../config/db.js";
 import * as employeeModel from "../models/employee.model.js";
+import * as userService from "./user.service.js";
 export const createEmployee = async (data) => {
   const {
     name,
@@ -68,9 +69,23 @@ export const getMyProfile = async (userId) => {
 };
 
 export const updateEmployee = async (employeeId, data) => {
-  return await employeeModel.updateEmployee(employeeId, data);
+  const existing = await employeeModel.getEmployeeById(employeeId);
+  return await employeeModel.updateEmployee(employeeId, {
+    ...existing,
+    ...data,
+  });
 };
 
 export const getEmployeeById = async (employeeId) => {
   return await employeeModel.getEmployeeById(employeeId);
+};
+
+export const deleteEmployee = async (employeeId) => {
+  const employee = await employeeModel.getEmployeeById(employeeId);
+
+  if (!employee) {
+    throw new Error("Employee not found");
+  }
+
+  return await userService.deleteUser(employee.user_id);
 };

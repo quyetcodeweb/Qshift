@@ -62,13 +62,15 @@ export const updateEmployee = async (employeeId, data) => {
     phone,
     avatar_url,
     hourly_rate,
+    hire_date,
+    status,
   } = data;
 
   await db.query(
     `UPDATE employees
-     SET name = ?, email = ?, phone = ?, avatar_url = ?, hourly_rate = ?
+     SET name = ?, email = ?, phone = ?, avatar_url = ?, hourly_rate = ?, hire_date = ?, status = ?
      WHERE employee_id = ?`,
-    [name, email, phone, avatar_url || null, hourly_rate, employeeId]
+    [name, email, phone, avatar_url || null, hourly_rate, hire_date || null, status, employeeId]
   );
 
   return getEmployeeById(employeeId);

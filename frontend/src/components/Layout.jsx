@@ -1,4 +1,5 @@
 import Sidebar from "./Sidebar";
+import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   BellIcon,
@@ -8,10 +9,11 @@ import {
   ArrowLeftOnRectangleIcon,
   HomeIcon,
   UserCircleIcon,
+  UsersIcon,
 } from "@heroicons/react/24/solid";
 import { getRole, logout } from "../utils/auth";
 
-function MobileNavItem({ to, icon: Icon, label, active }) {
+function MobileNavItem({ to, icon, label, active }) {
   return (
     <Link
       to={to}
@@ -19,7 +21,7 @@ function MobileNavItem({ to, icon: Icon, label, active }) {
         active ? "bg-blue-50 text-blue-700" : "text-gray-500"
       }`}
     >
-      <Icon className="h-5 w-5 shrink-0" />
+      {React.createElement(icon, { className: "h-5 w-5 shrink-0" })}
       <span className="max-w-full truncate">{label}</span>
     </Link>
   );
@@ -38,9 +40,9 @@ function MobileChrome() {
   ];
   const adminItems = [
     { to: "/", label: "Tổng quan", icon: HomeIcon },
+    { to: "/employeePage", label: "Nhân sự", icon: UsersIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
     { to: "/attendance", label: "Công", icon: ClockIcon },
-    { to: "/notifications", label: "Thông báo", icon: BellIcon },
     { to: "/profile", label: "Hồ sơ", icon: UserCircleIcon },
   ];
   const items = role === "ADMIN" ? adminItems : employeeItems;
