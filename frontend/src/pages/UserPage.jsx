@@ -99,6 +99,7 @@ export default function UserPage() {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-gray-100 text-sm text-gray-600">
+                <th className="p-3">Tên nhân viên</th>
                 <th className="p-3">Tên đăng nhập</th>
                 <th className="p-3">Role</th>
                 <th className="p-3">Trạng thái</th>
@@ -115,6 +116,9 @@ export default function UserPage() {
                     key={user.user_id}
                     className="border-b transition hover:bg-gray-50"
                   >
+                    <td className="p-3 font-medium text-gray-900">
+                      {user.employee_name || "-"}
+                    </td>
                     <td className="p-3 font-medium">{user.username}</td>
                     <td className="p-3">{user.role}</td>
 

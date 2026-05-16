@@ -20,7 +20,7 @@ CREATE TABLE employees (
     hourly_rate DECIMAL(10,2),
     hire_date DATE,
     status VARCHAR(50),
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 -- SHIFTS

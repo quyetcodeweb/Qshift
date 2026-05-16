@@ -1,7 +1,15 @@
 import db from "../config/db.js";
 
 export const getUsers = async () => {
-  const [rows] = await db.query("SELECT * FROM users");
+  const [rows] = await db.query(`
+    SELECT
+      u.*,
+      e.employee_id,
+      e.name AS employee_name
+    FROM users u
+    LEFT JOIN employees e ON e.user_id = u.user_id
+    ORDER BY u.user_id ASC
+  `);
   return rows;
 };
 
@@ -29,7 +37,129 @@ export const updateUser = async (id, data) => {
 };
 
 export const deleteUser = async (id) => {
-  await db.query("DELETE FROM users WHERE user_id=?", [id]);
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [employees] = await connection.query(
+      "SELECT employee_id FROM employees WHERE user_id = ?",
+      [id]
+    );
+    const employeeIds = employees.map((employee) => employee.employee_id);
+
+    if (employeeIds.length) {
+      const employeePlaceholders = employeeIds.map(() => "?").join(",");
+      const [schedules] = await connection.query(
+        `SELECT schedule_id FROM schedules WHERE employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      const scheduleIds = schedules.map((schedule) => schedule.schedule_id);
+      const schedulePlaceholders = scheduleIds.map(() => "?").join(",");
+
+      if (await tableExists(connection, "shift_swap_requests")) {
+        const scheduleFilter = scheduleIds.length
+          ? ` OR requester_schedule_id IN (${schedulePlaceholders}) OR target_schedule_id IN (${schedulePlaceholders})`
+          : "";
+        await connection.query(
+          `DELETE FROM shift_swap_requests
+           WHERE requester_employee_id IN (${employeePlaceholders})
+              OR target_employee_id IN (${employeePlaceholders})
+              ${scheduleFilter}`,
+          [
+            ...employeeIds,
+            ...employeeIds,
+            ...(scheduleIds.length ? [...scheduleIds, ...scheduleIds] : []),
+          ]
+        );
+      }
+
+      if (await tableExists(connection, "requests")) {
+        const scheduleFilter = scheduleIds.length
+          ? ` OR schedule_id IN (${schedulePlaceholders})`
+          : "";
+        await connection.query(
+          `DELETE FROM requests
+           WHERE employee_id IN (${employeePlaceholders})
+              OR target_employee_id IN (${employeePlaceholders})
+              ${scheduleFilter}`,
+          [
+            ...employeeIds,
+            ...employeeIds,
+            ...(scheduleIds.length ? scheduleIds : []),
+          ]
+        );
+      }
+
+      await deleteFromIfExists(
+        connection,
+        "attendance",
+        `employee_id IN (${employeePlaceholders})${
+          scheduleIds.length ? ` OR schedule_id IN (${schedulePlaceholders})` : ""
+        }`,
+        [...employeeIds, ...(scheduleIds.length ? scheduleIds : [])]
+      );
+      await deleteFromIfExists(
+        connection,
+        "draft_schedule_items",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      await deleteFromIfExists(
+        connection,
+        "schedules",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      await deleteFromIfExists(
+        connection,
+        "employee_availability",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      await deleteFromIfExists(
+        connection,
+        "availability_requests",
+        `employee_id IN (${employeePlaceholders}) OR user_id = ?`,
+        [...employeeIds, id]
+      );
+      await deleteFromIfExists(
+        connection,
+        "payroll_feedback",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      await deleteFromIfExists(
+        connection,
+        "payroll",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+      await deleteFromIfExists(
+        connection,
+        "employee_role_assignments",
+        `employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+
+      await connection.query(
+        `DELETE FROM employees WHERE employee_id IN (${employeePlaceholders})`,
+        employeeIds
+      );
+    } else {
+      await deleteFromIfExists(connection, "availability_requests", "user_id = ?", [id]);
+    }
+
+    await deleteFromIfExists(connection, "notifications", "user_id = ?", [id]);
+    await connection.query("DELETE FROM users WHERE user_id=?", [id]);
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 export const toggleUserStatus = async (id, status) => {
@@ -38,3 +168,18 @@ export const toggleUserStatus = async (id, status) => {
     [status, id]
   );
 };
+
+async function tableExists(connection, tableName) {
+  const [rows] = await connection.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [tableName]
+  );
+  return rows.length > 0;
+}
+
+async function deleteFromIfExists(connection, tableName, whereClause, params) {
+  if (!(await tableExists(connection, tableName))) return;
+  await connection.query(`DELETE FROM ${tableName} WHERE ${whereClause}`, params);
+}

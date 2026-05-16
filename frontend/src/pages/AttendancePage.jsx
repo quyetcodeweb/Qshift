@@ -45,6 +45,51 @@ function getShiftTimes(record) {
   return { start, end };
 }
 
+function getAttendanceWindow(record, records) {
+  const sameDayRecords = records
+    .filter(
+      (item) =>
+        item.employee_id === record.employee_id &&
+        item.work_date === record.work_date,
+    )
+    .map((item) => {
+      const { start, end } = getShiftTimes(item);
+      return { ...item, start, end };
+    })
+    .filter((item) => item.start && item.end)
+    .sort((a, b) => a.start - b.start || a.schedule_id - b.schedule_id);
+  const selectedIndex = sameDayRecords.findIndex(
+    (item) => item.schedule_id === record.schedule_id,
+  );
+
+  if (selectedIndex === -1) {
+    return getShiftTimes(record);
+  }
+
+  let firstIndex = selectedIndex;
+  while (
+    firstIndex > 0 &&
+    sameDayRecords[firstIndex - 1].end.getTime() ===
+      sameDayRecords[firstIndex].start.getTime()
+  ) {
+    firstIndex -= 1;
+  }
+
+  let lastIndex = selectedIndex;
+  while (
+    lastIndex < sameDayRecords.length - 1 &&
+    sameDayRecords[lastIndex].end.getTime() ===
+      sameDayRecords[lastIndex + 1].start.getTime()
+  ) {
+    lastIndex += 1;
+  }
+
+  return {
+    start: sameDayRecords[firstIndex].start,
+    end: sameDayRecords[lastIndex].end,
+  };
+}
+
 function formatTime(value) {
   if (!value) return "-";
   return value.slice(11, 16);
@@ -121,14 +166,14 @@ export default function AttendancePage() {
   );
 
   const canCheckIn = (record) => {
-    const { start, end } = getShiftTimes(record);
+    const { start, end } = getAttendanceWindow(record, records);
     if (!start || !end || record.check_in) return false;
     const openAt = new Date(start.getTime() - 15 * 60 * 1000);
     return now >= openAt && now < end;
   };
 
   const canCheckOut = (record) => {
-    const { end } = getShiftTimes(record);
+    const { end } = getAttendanceWindow(record, records);
     return Boolean(end && record.check_in && !record.check_out && now >= end);
   };
 

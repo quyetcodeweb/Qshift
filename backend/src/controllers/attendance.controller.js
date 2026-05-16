@@ -9,6 +9,70 @@ function toVietnamDateTime(date, time) {
   return new Date(`${date}T${time}${VIETNAM_TIMEZONE_OFFSET}`);
 }
 
+function getShiftBounds(schedule) {
+  const start = toVietnamDateTime(schedule.work_date, schedule.start_time);
+  let end = toVietnamDateTime(schedule.work_date, schedule.end_time);
+
+  if (start && end && end <= start) {
+    end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return { start, end };
+}
+
+async function getTodaySchedulesForEmployee(employeeId) {
+  const [schedules] = await database.query(
+    `SELECT
+      s.schedule_id,
+      s.employee_id,
+      e.name AS employee_name,
+      DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
+      sh.shift_name,
+      TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
+      TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time
+     FROM schedules s
+     JOIN employees e ON s.employee_id = e.employee_id
+     JOIN shifts sh ON s.shift_id = sh.shift_id
+     WHERE s.employee_id = ?
+       AND s.status = 'PUBLISHED'
+       AND s.work_date = ${TODAY_SQL}`,
+    [employeeId]
+  );
+
+  return schedules
+    .map((schedule) => {
+      const { start, end } = getShiftBounds(schedule);
+      return { ...schedule, shiftStart: start, shiftEnd: end };
+    })
+    .sort((a, b) => a.shiftStart - b.shiftStart || a.schedule_id - b.schedule_id);
+}
+
+function findContiguousScheduleGroup(schedules, scheduleId) {
+  const selectedIndex = schedules.findIndex(
+    (schedule) => Number(schedule.schedule_id) === Number(scheduleId)
+  );
+
+  if (selectedIndex === -1) return [];
+
+  let firstIndex = selectedIndex;
+  while (
+    firstIndex > 0 &&
+    schedules[firstIndex - 1].shiftEnd.getTime() === schedules[firstIndex].shiftStart.getTime()
+  ) {
+    firstIndex -= 1;
+  }
+
+  let lastIndex = selectedIndex;
+  while (
+    lastIndex < schedules.length - 1 &&
+    schedules[lastIndex].shiftEnd.getTime() === schedules[lastIndex + 1].shiftStart.getTime()
+  ) {
+    lastIndex += 1;
+  }
+
+  return schedules.slice(firstIndex, lastIndex + 1);
+}
+
 async function getCurrentUser(userId) {
   const [users] = await database.query(
     "SELECT user_id, role FROM users WHERE user_id = ?",
@@ -268,6 +332,110 @@ export async function markAttendance(req, res) {
     const { schedule_id, action } = req.body;
 
     if (!employee) {
+      return res.status(403).json({ message: "Khong tim thay ho so nhan vien" });
+    }
+
+    if (!schedule_id || !["check_in", "check_out"].includes(action)) {
+      return res.status(400).json({ message: "schedule_id va action khong hop le" });
+    }
+
+    const todaySchedules = await getTodaySchedulesForEmployee(employee.employee_id);
+    const groupSchedules = findContiguousScheduleGroup(todaySchedules, schedule_id);
+
+    if (!groupSchedules.length) {
+      return res.status(404).json({ message: "Khong tim thay ca lam hom nay" });
+    }
+
+    const schedule = groupSchedules[0];
+    const groupStart = groupSchedules[0].shiftStart;
+    const groupEnd = groupSchedules[groupSchedules.length - 1].shiftEnd;
+    const checkInOpenAt = new Date(groupStart.getTime() - 15 * 60 * 1000);
+    const now = new Date();
+    const scheduleIds = groupSchedules.map((item) => item.schedule_id);
+    const schedulePlaceholders = scheduleIds.map(() => "?").join(",");
+    const [existingRows] = await database.query(
+      `SELECT * FROM attendance WHERE schedule_id IN (${schedulePlaceholders})`,
+      scheduleIds
+    );
+    const existingByScheduleId = new Map(
+      existingRows.map((row) => [Number(row.schedule_id), row])
+    );
+
+    if (action === "check_in") {
+      if (existingRows.some((row) => row.check_in)) {
+        return res.status(400).json({ message: "Cum ca nay da duoc cham cong vao" });
+      }
+
+      if (now < checkInOpenAt || now >= groupEnd) {
+        return res.status(400).json({
+          message: "Chi co the cham cong vao trong vong 15 phut truoc khi cum ca bat dau",
+        });
+      }
+
+      const attendanceStatus = now > groupStart ? "LATE" : "ON_TIME";
+
+      for (const groupSchedule of groupSchedules) {
+        const existing = existingByScheduleId.get(Number(groupSchedule.schedule_id));
+
+        if (existing) {
+          await database.query(
+            `UPDATE attendance
+             SET check_in = ${LOCAL_NOW_SQL}, status = ?
+             WHERE attendance_id = ?`,
+            [attendanceStatus, existing.attendance_id]
+          );
+        } else {
+          await database.query(
+            `INSERT INTO attendance (employee_id, schedule_id, check_in, status)
+             VALUES (?, ?, ${LOCAL_NOW_SQL}, ?)`,
+            [employee.employee_id, groupSchedule.schedule_id, attendanceStatus]
+          );
+        }
+      }
+
+      await notifyAttendanceCheckIn(schedule, attendanceStatus);
+
+      return res.json({ message: "Da ghi nhan cham cong vao", status: attendanceStatus });
+    }
+
+    if (!existingRows.length || existingRows.some((row) => !row.check_in)) {
+      return res.status(400).json({ message: "Ban can cham cong vao truoc" });
+    }
+
+    if (existingRows.every((row) => row.check_out)) {
+      return res.status(400).json({ message: "Cum ca nay da duoc cham cong ra" });
+    }
+
+    if (now < groupEnd) {
+      return res.status(400).json({ message: "Chi co the cham cong ra khi cum ca vua ket thuc" });
+    }
+
+    await database.query(
+      `UPDATE attendance
+       SET check_out = ${LOCAL_NOW_SQL}
+       WHERE schedule_id IN (${schedulePlaceholders})`,
+      scheduleIds
+    );
+
+    res.json({ message: "Da ghi nhan cham cong ra" });
+  } catch (error) {
+    console.error("[markAttendance] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+async function markAttendanceLegacy(req, res) {
+  try {
+    const user = await getCurrentUser(req.user?.user_id);
+
+    if (!user) {
+      return res.status(401).json({ message: "Invalid user" });
+    }
+
+    const employee = await getEmployeeByUserId(user.user_id);
+    const { schedule_id, action } = req.body;
+
+    if (!employee) {
       return res.status(403).json({ message: "Không tìm thấy hồ sơ nhân viên" });
     }
 
@@ -363,3 +531,5 @@ export async function markAttendance(req, res) {
     res.status(500).json({ message: error.message });
   }
 }
+
+void markAttendanceLegacy;
