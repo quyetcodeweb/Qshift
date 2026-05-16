@@ -22,12 +22,12 @@ const statusText = {
 };
 
 const shiftPalette = [
-  { bg: "bg-blue-50", text: "text-blue-800", dot: "bg-blue-500" },
-  { bg: "bg-emerald-50", text: "text-emerald-800", dot: "bg-emerald-500" },
-  { bg: "bg-violet-50", text: "text-violet-800", dot: "bg-violet-500" },
-  { bg: "bg-amber-50", text: "text-amber-800", dot: "bg-amber-500" },
-  { bg: "bg-cyan-50", text: "text-cyan-800", dot: "bg-cyan-500" },
-  { bg: "bg-rose-50", text: "text-rose-800", dot: "bg-rose-500" },
+  { background: "#eff6ff", text: "#1e40af", dot: "#3b82f6" },
+  { background: "#ecfdf5", text: "#065f46", dot: "#10b981" },
+  { background: "#f5f3ff", text: "#5b21b6", dot: "#8b5cf6" },
+  { background: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
+  { background: "#ecfeff", text: "#155e75", dot: "#06b6d4" },
+  { background: "#fff1f2", text: "#9f1239", dot: "#f43f5e" },
 ];
 
 const viewOptions = [
@@ -185,17 +185,22 @@ function ScheduleTag({
       onClick={() => {
         if (isOtherEmployee) onSelectSwap(schedule);
       }}
-      className={`group relative w-full rounded-md border-l-4 ${border} ${tone.bg} px-2 py-1.5 text-left text-[11px] font-bold ${tone.text} shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+      className={`group relative z-0 w-full rounded-md border-l-4 ${border} px-2 py-1.5 text-left text-[11px] font-bold shadow-sm transition hover:z-[1000] hover:-translate-y-0.5 hover:shadow-md ${
         isOtherEmployee ? "cursor-pointer" : "cursor-default"
       }`}
+      style={{ backgroundColor: tone.background, color: tone.text }}
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: tone.dot }}
+        />
         <span className="min-w-0 truncate">{label}</span>
       </span>
 
       {role === "ADMIN" && (
-        <span className="pointer-events-none absolute left-2 top-full z-30 mt-2 hidden w-56 rounded-md border border-gray-200 bg-white/95 p-3 text-xs font-medium text-gray-700 shadow-xl backdrop-blur group-hover:block">
+        <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-gray-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block">
+          <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-gray-200 bg-white" />
           <span className="block font-bold text-gray-950">{schedule.employee_name}</span>
           <span className="mt-1 block">{schedule.shift_name}</span>
           <span className="mt-1 block">
@@ -598,7 +603,7 @@ export default function ShiftsCalendar() {
     return (
       <div
         key={key}
-        className={`min-h-[132px] rounded-md border border-gray-200 bg-white p-2 ${
+        className={`relative z-0 min-h-[132px] overflow-visible rounded-md border border-gray-200 bg-white p-2 hover:z-[900] ${
           viewMode === "month" && !isCurrentMonth ? "bg-gray-50 text-gray-400" : ""
         }`}
       >
@@ -793,7 +798,7 @@ export default function ShiftsCalendar() {
                   </div>
                 ))}
               </div>
-              <div className={`grid grid-cols-1 gap-2 sm:grid-cols-7 ${viewMode === "week" ? "sm:auto-rows-fr" : ""}`}>
+              <div className={`grid grid-cols-1 gap-2 overflow-visible sm:grid-cols-7 ${viewMode === "week" ? "sm:auto-rows-fr" : ""}`}>
                 {visibleDates.map(renderDayCell)}
               </div>
             </>
