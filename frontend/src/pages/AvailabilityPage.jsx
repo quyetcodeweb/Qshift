@@ -1,28 +1,61 @@
-import {
-  Card,
-  Button,
-  Typography,
-  Select,
-  Option,
-} from "@material-tailwind/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import {
+  Button,
+  Card,
+  Dialog,
+  DialogBody,
+  DialogHeader,
+  Option,
+  Select,
+  Spinner,
+  Typography,
+} from "@material-tailwind/react";
+import {
+  CalendarDaysIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  FunnelIcon,
+  InformationCircleIcon,
+  PaperAirplaneIcon,
+  QuestionMarkCircleIcon,
+  UserCircleIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
 
 const ACCESS_KEY = "availabilityFillRequest";
 
-const readAccess = () => {
+function readAccess() {
   try {
     return JSON.parse(localStorage.getItem(ACCESS_KEY));
   } catch {
     return null;
   }
-};
+}
+
+function authHeaders() {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function pad(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString("vi-VN");
+}
+
+function formatTime(value) {
+  return value?.slice(0, 5) || "--:--";
+}
 
 export default function AvailabilityPage() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user?.role;
   const userId = user?.user_id;
   const employeeAccess = readAccess();
@@ -33,76 +66,54 @@ export default function AvailabilityPage() {
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [employeeId, setEmployeeId] = useState("");
-  const [month, setMonth] = useState(
-    requestedMonth || new Date().getMonth() + 1,
-  );
+  const [month, setMonth] = useState(requestedMonth || new Date().getMonth() + 1);
   const [year, setYear] = useState(requestedYear || new Date().getFullYear());
   const [grid, setGrid] = useState({});
   const [originalGrid, setOriginalGrid] = useState({});
   const [loading, setLoading] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [helpOpen, setHelpOpen] = useState(false);
 
+  const isEmployee = role === "EMPLOYEE";
+  const isAdmin = role === "ADMIN";
   const canEmployeeFill = useMemo(() => {
-    if (role !== "EMPLOYEE") return true;
+    if (!isEmployee) return true;
     return Boolean(employeeAccess?.month && employeeAccess?.year);
-  }, [employeeAccess?.month, employeeAccess?.year, role]);
+  }, [employeeAccess?.month, employeeAccess?.year, isEmployee]);
 
-  useEffect(() => {
-    fetchInit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const selectedEmployee = useMemo(
+    () => employees.find((employee) => String(employee.employee_id) === String(employeeId)),
+    [employeeId, employees],
+  );
 
-  useEffect(() => {
-    if (role === "EMPLOYEE" && employeeAccess?.month && employeeAccess?.year) {
-      setMonth(Number(employeeAccess.month));
-      setYear(Number(employeeAccess.year));
-    }
-  }, [employeeAccess?.month, employeeAccess?.year, role]);
+  const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [month, year]);
 
-  const fetchInit = async () => {
-    try {
-      setLoadingEmployees(true);
-      const [empRes, shiftRes] = await Promise.all([
-        axios.get(`${API_URL}/employees`),
-        axios.get(`${API_URL}/shifts`),
-      ]);
+  const selectedCount = useMemo(
+    () =>
+      Object.values(grid).reduce(
+        (total, dayValue) => total + Object.values(dayValue || {}).filter(Boolean).length,
+        0,
+      ),
+    [grid],
+  );
 
-      setEmployees(empRes.data);
-      setShifts(shiftRes.data);
+  const hasChanged = useMemo(
+    () => JSON.stringify(grid) !== JSON.stringify(originalGrid),
+    [grid, originalGrid],
+  );
 
-      if (role === "EMPLOYEE") {
-        if (user?.employee_id) {
-          setEmployeeId(String(user.employee_id));
-        } else {
-          const myEmployee = empRes.data.find((e) => e.user_id === userId);
-          if (myEmployee) {
-            setEmployeeId(String(myEmployee.employee_id));
-          }
-        }
-      } else if (role === "ADMIN" && empRes.data.length > 0) {
-        setEmployeeId(String(empRes.data[0].employee_id));
-      }
-    } catch (err) {
-      console.error("fetchInit error:", err);
-    } finally {
-      setLoadingEmployees(false);
-    }
-  };
+  const createEmptyGrid = useCallback((targetMonth, targetYear, shiftList) => {
+    const days = new Date(targetYear, targetMonth, 0).getDate();
+    const nextGrid = {};
 
-  const pad = (n) => String(n).padStart(2, "0");
-
-  const createEmptyGrid = useCallback((m, y, shiftList) => {
-    const days = new Date(y, m, 0).getDate();
-    const init = {};
-
-    for (let d = 1; d <= days; d++) {
-      init[d] = {};
-      shiftList.forEach((s) => {
-        init[d][s.shift_id] = false;
+    for (let day = 1; day <= days; day += 1) {
+      nextGrid[day] = {};
+      shiftList.forEach((shift) => {
+        nextGrid[day][shift.shift_id] = false;
       });
     }
 
-    return init;
+    return nextGrid;
   }, []);
 
   const getAvailabilityDay = useCallback((item) => {
@@ -121,42 +132,56 @@ export default function AvailabilityPage() {
 
   const applyAvailabilityToGrid = useCallback(
     (records) => {
-      const newGrid = createEmptyGrid(month, year, shifts);
+      const nextGrid = createEmptyGrid(month, year, shifts);
 
       records.forEach((item) => {
         const day = getAvailabilityDay(item);
-        if (day && newGrid[day]) {
-          newGrid[day][item.shift_id] = true;
+        if (day && nextGrid[day]) {
+          nextGrid[day][item.shift_id] = true;
         }
       });
 
-      setGrid(newGrid);
-      setOriginalGrid(JSON.parse(JSON.stringify(newGrid)));
+      setGrid(nextGrid);
+      setOriginalGrid(JSON.parse(JSON.stringify(nextGrid)));
     },
     [createEmptyGrid, getAvailabilityDay, month, shifts, year],
   );
 
-  useEffect(() => {
-    if (!shifts.length) return;
+  const fetchInit = useCallback(async () => {
+    try {
+      setLoadingEmployees(true);
+      const [employeeRes, shiftRes] = await Promise.all([
+        axios.get(`${API_URL}/employees`, { headers: authHeaders() }),
+        axios.get(`${API_URL}/shifts`, { headers: authHeaders() }),
+      ]);
 
-    const init = createEmptyGrid(month, year, shifts);
-    setGrid(init);
-    setOriginalGrid(init);
-  }, [shifts, month, year, createEmptyGrid]);
+      const employeeList = employeeRes.data || [];
+      setEmployees(employeeList);
+      setShifts(shiftRes.data || []);
 
-  useEffect(() => {
-    if (!employeeId || !canEmployeeFill || !shifts.length) return;
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, month, year, canEmployeeFill, shifts.length]);
+      if (isEmployee) {
+        if (user?.employee_id) {
+          setEmployeeId(String(user.employee_id));
+        } else {
+          const myEmployee = employeeList.find((employee) => employee.user_id === userId);
+          if (myEmployee) setEmployeeId(String(myEmployee.employee_id));
+        }
+      } else if (employeeList.length > 0) {
+        setEmployeeId(String(employeeList[0].employee_id));
+      }
+    } catch (err) {
+      console.error("fetchInit error:", err);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }, [isEmployee, user?.employee_id, userId]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(
-        `${API_URL}/availability/${employeeId}?month=${month}&year=${year}`,
-      );
-
+      const res = await axios.get(`${API_URL}/availability/${employeeId}?month=${month}&year=${year}`, {
+        headers: authHeaders(),
+      });
       const fallbackAvailability = Array.isArray(employeeAccess?.availability)
         ? employeeAccess.availability
         : [];
@@ -167,17 +192,30 @@ export default function AvailabilityPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [applyAvailabilityToGrid, employeeAccess?.availability, employeeId, month, year]);
 
-  const toggle = (day, shift) => {
-    setGrid((prev) => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [shift]: !prev[day][shift],
-      },
-    }));
-  };
+  useEffect(() => {
+    fetchInit();
+  }, [fetchInit]);
+
+  useEffect(() => {
+    if (isEmployee && employeeAccess?.month && employeeAccess?.year) {
+      setMonth(Number(employeeAccess.month));
+      setYear(Number(employeeAccess.year));
+    }
+  }, [employeeAccess?.month, employeeAccess?.year, isEmployee]);
+
+  useEffect(() => {
+    if (!shifts.length) return;
+    const nextGrid = createEmptyGrid(month, year, shifts);
+    setGrid(nextGrid);
+    setOriginalGrid(nextGrid);
+  }, [createEmptyGrid, month, shifts, year]);
+
+  useEffect(() => {
+    if (!employeeId || !canEmployeeFill || !shifts.length) return;
+    fetchData();
+  }, [canEmployeeFill, employeeId, fetchData, shifts.length]);
 
   const buildAvailability = () => {
     const availability = [];
@@ -201,32 +239,30 @@ export default function AvailabilityPage() {
     window.dispatchEvent(new Event("availability-access-changed"));
   };
 
+  const toggle = (day, shiftId) => {
+    setGrid((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [shiftId]: !prev[day]?.[shiftId],
+      },
+    }));
+  };
+
   const handleSave = async () => {
     try {
-      const hasChanged = JSON.stringify(grid) !== JSON.stringify(originalGrid);
-
-      if (role !== "EMPLOYEE" && !hasChanged) {
+      if (!isEmployee && !hasChanged) {
         alert("Không có thay đổi để lưu!");
         return;
       }
 
       const availability = buildAvailability();
 
-      if (role === "EMPLOYEE") {
-        const token = localStorage.getItem("token");
-
+      if (isEmployee) {
         await axios.post(
           `${API_URL}/availability/request`,
-          {
-            month,
-            year,
-            data: availability,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
+          { month, year, data: availability },
+          { headers: authHeaders() },
         );
 
         clearEmployeeAccess();
@@ -236,10 +272,14 @@ export default function AvailabilityPage() {
         return;
       }
 
-      await axios.post(`${API_URL}/availability`, {
-        employee_id: Number(employeeId),
-        availability,
-      });
+      await axios.post(
+        `${API_URL}/availability`,
+        {
+          employee_id: Number(employeeId),
+          availability,
+        },
+        { headers: authHeaders() },
+      );
 
       alert("Lưu thành công!");
       fetchData();
@@ -251,10 +291,11 @@ export default function AvailabilityPage() {
 
   const sendFillRequest = async () => {
     try {
-      const res = await axios.post(`${API_URL}/notifications/send`, {
-        month,
-        year,
-      });
+      const res = await axios.post(
+        `${API_URL}/notifications/send`,
+        { month, year },
+        { headers: authHeaders() },
+      );
       alert(`Đã gửi yêu cầu cho ${res.data.count || 0} nhân viên!`);
     } catch (err) {
       console.error(err);
@@ -262,163 +303,283 @@ export default function AvailabilityPage() {
     }
   };
 
-  if (role === "EMPLOYEE" && !canEmployeeFill) {
+  if (isEmployee && !canEmployeeFill) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <Card className="p-6 shadow-lg">
-          <Typography variant="h4" className="mb-3">
-            Thời gian rảnh
-          </Typography>
-          <p className="text-gray-700">
-            Mục này chỉ mở khi admin gửi yêu cầu điền lịch rảnh. Vui lòng kiểm
-            tra thông báo và nhấn OK để bắt đầu.
-          </p>
+      <div className="mx-auto max-w-5xl p-4 sm:p-6">
+        <Card className="rounded-md border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <InformationCircleIcon className="mt-0.5 h-6 w-6 shrink-0 text-blue-600" />
+            <div>
+              <Typography variant="h5" className="font-bold text-gray-950">
+                Thời gian rảnh
+              </Typography>
+              <Typography className="mt-2 text-sm leading-6 text-gray-600">
+                Mục này chỉ mở khi admin gửi yêu cầu điền lịch rảnh. Vui lòng kiểm tra thông báo và nhấn OK để bắt đầu.
+              </Typography>
+            </div>
+          </div>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <Card className="p-6 shadow-lg">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <Typography variant="h4">Thời gian rảnh</Typography>
-            {role === "EMPLOYEE" && (
-              <p className="mt-1 text-sm text-gray-600">
-                Chỉ điền lịch rảnh cho tháng {month}/{year} theo yêu cầu của
-                admin.
-              </p>
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Typography variant="h4" className="font-bold tracking-tight text-gray-950">
+            Thời gian rảnh
+          </Typography>
+          <Typography className="mt-1 text-sm text-gray-600">
+            Chọn các ca mà nhân viên có thể làm để hệ thống tự động xếp lịch chính xác hơn.
+          </Typography>
+        </div>
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          aria-label="Chú thích chức năng"
+        >
+          <QuestionMarkCircleIcon className="h-6 w-6" />
+        </button>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <Card className="h-fit rounded-md border border-gray-200 bg-white p-4 shadow-sm lg:sticky lg:top-4">
+          <div className="mb-4 flex items-center gap-2">
+            <FunnelIcon className="h-5 w-5 text-blue-600" />
+            <Typography variant="h6" className="font-bold text-gray-950">
+              Bộ lọc
+            </Typography>
+          </div>
+
+          <div className="space-y-4">
+            {isEmployee ? (
+              <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-blue-900">
+                  <UserCircleIcon className="h-5 w-5" />
+                  {selectedEmployee?.name || `ID: ${employeeId}`}
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
+                  <CalendarDaysIcon className="h-5 w-5" />
+                  Tháng {month}/{year}
+                </div>
+              </div>
+            ) : (
+              <>
+                <Select
+                  label={loadingEmployees ? "Đang tải nhân viên..." : "Nhân viên"}
+                  value={employeeId || ""}
+                  onChange={(value) => setEmployeeId(value || "")}
+                  disabled={loadingEmployees || employees.length === 0}
+                >
+                  {employees.length === 0 ? (
+                    <Option value="" disabled>
+                      {loadingEmployees ? "Đang tải..." : "Không có nhân viên"}
+                    </Option>
+                  ) : (
+                    employees.map((employee) => (
+                      <Option key={employee.employee_id} value={String(employee.employee_id)}>
+                        {employee.name}
+                      </Option>
+                    ))
+                  )}
+                </Select>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Select label="Tháng" value={String(month)} onChange={(value) => setMonth(Number(value))}>
+                    {[...Array(12)].map((_, index) => (
+                      <Option key={index + 1} value={String(index + 1)}>
+                        Tháng {index + 1}
+                      </Option>
+                    ))}
+                  </Select>
+                  <Select label="Năm" value={String(year)} onChange={(value) => setYear(Number(value))}>
+                    {[2024, 2025, 2026, 2027, 2028].map((item) => (
+                      <Option key={item} value={String(item)}>
+                        {item}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+              </>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border border-gray-200 p-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                  <CalendarDaysIcon className="h-4 w-4" />
+                  Ngày
+                </div>
+                <div className="mt-1 text-xl font-bold text-gray-950">{daysInMonth}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 p-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                  <CheckCircleIcon className="h-4 w-4" />
+                  Đã chọn
+                </div>
+                <div className="mt-1 text-xl font-bold text-gray-950">{selectedCount}</div>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 p-3">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                <ClockIcon className="h-4 w-4" />
+                Ca làm
+              </div>
+              <div className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
+                {shifts.length === 0 ? (
+                  <div className="text-sm font-medium text-gray-500">Chưa có ca làm</div>
+                ) : (
+                  shifts.map((shift) => (
+                    <div key={shift.shift_id} className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: shift.color || "#2563eb" }}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{shift.shift_name}</span>
+                      <span className="shrink-0 text-xs text-gray-500">
+                        {formatTime(shift.start_time)} - {formatTime(shift.end_time)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {isAdmin && (
+              <Button
+                variant="outlined"
+                onClick={sendFillRequest}
+                className="flex w-full items-center justify-center gap-2 rounded-md border-blue-200 normal-case text-blue-700"
+              >
+                <PaperAirplaneIcon className="h-5 w-5" />
+                Gửi yêu cầu nhân viên
+              </Button>
             )}
           </div>
+        </Card>
 
-          {role === "ADMIN" && (
-            <Button className="bg-blue-600" onClick={sendFillRequest}>
-              Gửi yêu cầu nhân viên
-            </Button>
-          )}
-        </div>
-
-        {!employeeId && (
-          <div className="mb-4 rounded border border-yellow-400 bg-yellow-100 p-3 text-yellow-800">
-            Đang tải dữ liệu...
-          </div>
-        )}
-
-        {role === "EMPLOYEE" && employeeId && (
-          <div className="mb-4 rounded border border-blue-200 bg-blue-50 p-3">
-            <p className="text-sm text-gray-700">
-              <strong>Nhân viên:</strong>{" "}
-              {employees.find((e) => String(e.employee_id) === employeeId)
-                ?.name || `ID: ${employeeId}`}
-            </p>
-          </div>
-        )}
-
-        <div className="mb-6 flex flex-wrap gap-4">
-          {role === "ADMIN" && (
-            <Select
-              label={loadingEmployees ? "Đang tải nhân viên..." : "Nhân viên"}
-              value={employeeId || ""}
-              onChange={(v) => setEmployeeId(v)}
-              disabled={loadingEmployees || employees.length === 0}
-            >
-              {employees.length === 0 ? (
-                <Option value="" disabled>
-                  {loadingEmployees ? "Đang tải..." : "Không có nhân viên"}
-                </Option>
-              ) : (
-                employees.map((e) => (
-                  <Option key={e.employee_id} value={String(e.employee_id)}>
-                    {e.name}
-                  </Option>
-                ))
-              )}
-            </Select>
-          )}
-
-          {role === "ADMIN" ? (
-            <>
-              <Select
-                label="Tháng"
-                value={String(month)}
-                onChange={(val) => setMonth(Number(val))}
-              >
-                {[...Array(12)].map((_, i) => (
-                  <Option key={i + 1} value={String(i + 1)}>
-                    Tháng {i + 1}
-                  </Option>
-                ))}
-              </Select>
-
-              <Select
-                label="Năm"
-                value={String(year)}
-                onChange={(val) => setYear(Number(val))}
-              >
-                {[2024, 2025, 2026, 2027].map((y) => (
-                  <Option key={y} value={String(y)}>
-                    {y}
-                  </Option>
-                ))}
-              </Select>
-            </>
-          ) : (
-            <div className="rounded border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">
-              Tháng {month}/{year}
+        <Card className="flex h-[calc(100vh-170px)] min-h-[560px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm max-lg:h-[680px]">
+          <div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Typography variant="h6" className="font-bold text-gray-950">
+                Form đăng ký lịch rảnh
+              </Typography>
+              <Typography className="text-sm text-gray-500">
+                {selectedEmployee?.name || "Chưa chọn nhân viên"} · Tháng {month}/{year}
+              </Typography>
             </div>
-          )}
-        </div>
+            <Button
+              onClick={handleSave}
+              disabled={!employeeId || loading || (!isEmployee && !hasChanged)}
+              className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2.5 normal-case text-white disabled:opacity-50"
+            >
+              <CheckCircleIcon className="h-5 w-5" />
+              Lưu lịch rảnh
+            </Button>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border text-center">
-            <thead>
-              <tr>
-                <th className="bg-red-500 p-2 text-white">Ngày</th>
-                {shifts.map((s) => (
-                  <th key={s.shift_id} className="bg-blue-400 p-2 text-white">
-                    {s.shift_name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Object.keys(grid)
-                .sort((a, b) => Number(a) - Number(b))
-                .map((day) => (
-                  <tr key={day}>
-                    <td className="bg-red-400 text-white">{day}</td>
-
-                    {shifts.map((s) => (
-                      <td key={s.shift_id} className="bg-gray-100 p-2">
-                        <input
-                          type="checkbox"
-                          checked={grid[day]?.[s.shift_id] || false}
-                          onChange={() => toggle(day, s.shift_id)}
-                          className="h-5 w-5"
-                        />
-                      </td>
+          {!employeeId ? (
+            <div className="flex flex-1 items-center justify-center p-8 text-center text-sm font-medium text-gray-500">
+              Đang tải dữ liệu nhân viên...
+            </div>
+          ) : loading ? (
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner className="h-8 w-8 text-blue-600" />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto">
+              <table className="min-w-max w-full border-separate border-spacing-0 text-left">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 top-0 z-20 w-28 border-b border-r border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-gray-600">
+                      Ngày
+                    </th>
+                    {shifts.map((shift) => (
+                      <th
+                        key={shift.shift_id}
+                        className="sticky top-0 z-10 min-w-44 border-b border-gray-200 bg-gray-50 px-3 py-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: shift.color || "#2563eb" }}
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold text-gray-950">{shift.shift_name}</div>
+                            <div className="mt-0.5 text-xs font-semibold text-gray-500">
+                              {formatTime(shift.start_time)} - {formatTime(shift.end_time)}
+                            </div>
+                          </div>
+                        </div>
+                      </th>
                     ))}
                   </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {Object.keys(grid)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((day) => {
+                      const dateValue = `${year}-${pad(month)}-${pad(day)}`;
+                      return (
+                        <tr key={day} className="group">
+                          <td className="sticky left-0 z-10 border-b border-r border-gray-100 bg-white px-4 py-3 group-hover:bg-blue-50">
+                            <div className="text-sm font-bold text-gray-950">{day}</div>
+                            <div className="text-xs font-medium text-gray-500">{formatDate(dateValue)}</div>
+                          </td>
+                          {shifts.map((shift) => {
+                            const checked = Boolean(grid[day]?.[shift.shift_id]);
+                            return (
+                              <td key={shift.shift_id} className="border-b border-gray-100 bg-white px-3 py-3 group-hover:bg-blue-50">
+                                <button
+                                  type="button"
+                                  onClick={() => toggle(day, shift.shift_id)}
+                                  className={`flex h-10 w-full items-center justify-center rounded-md border text-sm font-bold transition ${
+                                    checked
+                                      ? "border-green-200 bg-green-50 text-green-700"
+                                      : "border-gray-200 bg-gray-50 text-gray-400 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                                  }`}
+                                  aria-pressed={checked}
+                                >
+                                  {checked ? "Rảnh" : "Không"}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
 
-        <Button
-          onClick={handleSave}
-          disabled={
-            !employeeId ||
-            loading ||
-            (role !== "EMPLOYEE" &&
-              JSON.stringify(grid) === JSON.stringify(originalGrid))
-          }
-          className="mt-6 bg-green-600"
-        >
-          Lưu
-        </Button>
-      </Card>
+      <Dialog open={helpOpen} handler={() => setHelpOpen(false)} size="md">
+        <DialogHeader className="border-b border-gray-100">
+          <div className="flex w-full items-center justify-between gap-3">
+            <Typography variant="h5" className="font-bold text-gray-950">
+              Chú thích thời gian rảnh
+            </Typography>
+            <button type="button" onClick={() => setHelpOpen(false)} className="rounded-md p-2 text-gray-500 hover:bg-gray-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <div className="rounded-md bg-gray-50 p-3 text-sm leading-6 text-gray-700">
+            Admin chọn nhân viên, tháng và năm để xem hoặc chỉnh lịch rảnh. Nút gửi yêu cầu sẽ thông báo nhân viên điền lịch rảnh cho tháng đang chọn.
+          </div>
+          <div className="rounded-md bg-green-50 p-3 text-sm leading-6 text-green-800">
+            Nhân viên chỉ thấy trang này khi có yêu cầu từ admin. Sau khi lưu, dữ liệu được gửi về admin duyệt.
+          </div>
+          <div className="rounded-md bg-blue-50 p-3 text-sm leading-6 text-blue-800">
+            Bảng bên phải có thể cuộn ngang khi có nhiều ca làm và cuộn dọc khi tháng có nhiều ngày.
+          </div>
+        </DialogBody>
+      </Dialog>
     </div>
   );
 }
