@@ -18,6 +18,7 @@ import {
   ClockIcon,
   FunnelIcon,
   InformationCircleIcon,
+  MagnifyingGlassIcon,
   PaperAirplaneIcon,
   QuestionMarkCircleIcon,
   UserCircleIcon,
@@ -73,6 +74,8 @@ export default function AvailabilityPage() {
   const [loading, setLoading] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
 
   const isEmployee = role === "EMPLOYEE";
   const isAdmin = role === "ADMIN";
@@ -85,6 +88,14 @@ export default function AvailabilityPage() {
     () => employees.find((employee) => String(employee.employee_id) === String(employeeId)),
     [employeeId, employees],
   );
+  const filteredEmployees = useMemo(() => {
+    const keyword = employeeSearch.trim().toLowerCase();
+    if (!keyword) return employees;
+    return employees.filter((employee) =>
+      [employee.name, employee.email, employee.phone, employee.employee_code]
+        .some((value) => String(value || "").toLowerCase().includes(keyword)),
+    );
+  }, [employeeSearch, employees]);
 
   const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [month, year]);
 
@@ -367,6 +378,64 @@ export default function AvailabilityPage() {
               </div>
             ) : (
               <>
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={loadingEmployees || employees.length === 0}
+                    onClick={() => setEmployeePickerOpen((open) => !open)}
+                    className="flex h-11 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-left text-sm font-semibold text-gray-900 outline-none transition hover:border-blue-500 focus:border-blue-600 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {loadingEmployees
+                        ? "Đang tải nhân viên..."
+                        : selectedEmployee?.name || "Chọn nhân viên"}
+                    </span>
+                    <UserCircleIcon className="h-5 w-5 shrink-0 text-gray-400" />
+                  </button>
+                  {employeePickerOpen && (
+                    <div className="absolute left-0 top-12 z-40 w-full rounded-md border border-gray-200 bg-white p-2 shadow-xl">
+                      <div className="relative mb-2">
+                        <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          value={employeeSearch}
+                          onChange={(event) => setEmployeeSearch(event.target.value)}
+                          placeholder="Tìm tên, email, SĐT..."
+                          className="h-10 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-600"
+                        />
+                      </div>
+                      <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                        {filteredEmployees.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-sm font-medium text-gray-500">
+                            Không tìm thấy nhân viên
+                          </div>
+                        ) : (
+                          filteredEmployees.map((employee) => (
+                            <button
+                              key={employee.employee_id}
+                              type="button"
+                              onClick={() => {
+                                setEmployeeId(String(employee.employee_id));
+                                setEmployeePickerOpen(false);
+                                setEmployeeSearch("");
+                              }}
+                              className={`w-full rounded-md px-3 py-2 text-left transition ${
+                                String(employee.employee_id) === String(employeeId)
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="truncate text-sm font-bold">{employee.name}</div>
+                              <div className="truncate text-xs font-medium text-gray-500">
+                                {employee.email || employee.phone || `ID: ${employee.employee_id}`}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="hidden">
                 <Select
                   label={loadingEmployees ? "Đang tải nhân viên..." : "Nhân viên"}
                   value={employeeId || ""}
@@ -385,8 +454,9 @@ export default function AvailabilityPage() {
                     ))
                   )}
                 </Select>
+                </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3">
                   <Select label="Tháng" value={String(month)} onChange={(value) => setMonth(Number(value))}>
                     {[...Array(12)].map((_, index) => (
                       <Option key={index + 1} value={String(index + 1)}>

@@ -11,13 +11,14 @@ import {
   UserCircleIcon,
   UsersIcon,
 } from "@heroicons/react/24/solid";
+import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import { getRole, logout } from "../utils/auth";
 
 function MobileNavItem({ to, icon, label, active }) {
   return (
     <Link
       to={to}
-      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-[11px] font-semibold ${
+      className={`flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-[11px] font-semibold ${
         active ? "bg-blue-50 text-blue-700" : "text-gray-500"
       }`}
     >
@@ -30,10 +31,42 @@ function MobileNavItem({ to, icon, label, active }) {
 function MobileChrome() {
   const role = getRole();
   const location = useLocation();
+  const [availabilityAccess, setAvailabilityAccess] = React.useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("availabilityFillRequest"));
+    } catch {
+      return null;
+    }
+  });
   const isActive = (path) => location.pathname === path;
+  const showAvailabilityLink =
+    role === "ADMIN" ||
+    Boolean(availabilityAccess?.month && availabilityAccess?.year);
+
+  React.useEffect(() => {
+    const refreshAvailabilityAccess = () => {
+      try {
+        setAvailabilityAccess(JSON.parse(localStorage.getItem("availabilityFillRequest")));
+      } catch {
+        setAvailabilityAccess(null);
+      }
+    };
+
+    window.addEventListener("availability-access-changed", refreshAvailabilityAccess);
+    window.addEventListener("storage", refreshAvailabilityAccess);
+
+    return () => {
+      window.removeEventListener("availability-access-changed", refreshAvailabilityAccess);
+      window.removeEventListener("storage", refreshAvailabilityAccess);
+    };
+  }, []);
+
   const employeeItems = [
     { to: "/", label: "Tổng quan", icon: HomeIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
+    ...(showAvailabilityLink
+      ? [{ to: "/availabilityPage", label: "Rảnh", icon: ClipboardDocumentListIcon }]
+      : []),
     { to: "/attendance", label: "Chấm công", icon: ClockIcon },
     { to: "/payroll", label: "Lương", icon: CurrencyDollarIcon },
     { to: "/profile", label: "Hồ sơ", icon: UserCircleIcon },
@@ -42,6 +75,8 @@ function MobileChrome() {
     { to: "/", label: "Tổng quan", icon: HomeIcon },
     { to: "/employeePage", label: "Nhân sự", icon: UsersIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
+    { to: "/createSchedule", label: "Tạo lịch", icon: ClipboardDocumentListIcon },
+    { to: "/availabilityPage", label: "Rảnh", icon: CalendarDaysIcon },
     { to: "/attendance", label: "Công", icon: ClockIcon },
     { to: "/profile", label: "Hồ sơ", icon: UserCircleIcon },
   ];
@@ -73,7 +108,7 @@ function MobileChrome() {
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 gap-1 border-t border-gray-200 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex gap-1 overflow-x-auto border-t border-gray-200 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] md:hidden">
         {items.map((item) => (
           <MobileNavItem
             key={item.to}

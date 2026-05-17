@@ -8,6 +8,7 @@ import {
   ChartBarIcon,
   CheckCircleIcon,
   ClockIcon,
+  MagnifyingGlassIcon,
   TrophyIcon,
   UserGroupIcon,
   UserMinusIcon,
@@ -203,10 +204,7 @@ function buildTrend(
   dateMode,
   dateParams,
 ) {
-  if (
-    records.length > 0 &&
-    (dateMode === "month" || dateMode === "custom")
-  ) {
+  if (records.length > 0 && (dateMode === "month" || dateMode === "custom")) {
     const grouped = new Map();
 
     records.forEach((record) => {
@@ -349,7 +347,7 @@ function LineChart({ data }) {
 
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-md border border-dashed border-gray-200 bg-gray-50 text-sm font-medium text-gray-500">
+      <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-gray-200 bg-gray-50 px-2 text-center text-[11px] font-medium text-gray-500 sm:h-64 sm:text-sm">
         Chưa có dữ liệu để vẽ biểu đồ
       </div>
     );
@@ -359,7 +357,7 @@ function LineChart({ data }) {
     <div className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-[260px] min-w-[620px] w-full"
+        className="h-[120px] min-w-[340px] w-full sm:h-[260px] sm:min-w-[620px]"
       >
         <defs>
           <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
@@ -437,7 +435,12 @@ function LineChart({ data }) {
         {data.map((item, index) => (
           <g key={`${item.label}-${index}`}>
             <circle cx={x(index)} cy={y(item.shifts)} r="4" fill="#2563eb" />
-            <circle cx={x(index)} cy={y(item.completed)} r="3.5" fill="#16a34a" />
+            <circle
+              cx={x(index)}
+              cy={y(item.completed)}
+              r="3.5"
+              fill="#16a34a"
+            />
             <circle cx={x(index)} cy={y(item.late)} r="3.5" fill="#f97316" />
             <circle cx={x(index)} cy={y(item.leave)} r="3.5" fill="#dc2626" />
             <circle cx={x(index)} cy={y(item.missing)} r="3.5" fill="#111827" />
@@ -555,6 +558,8 @@ export default function Dashboard() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [roleAssignments, setRoleAssignments] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState("all");
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [dateMode, setDateMode] = useState("all");
   const [month, setMonth] = useState(currentMonth);
   const [customRange, setCustomRange] = useState({
@@ -843,6 +848,19 @@ export default function Dashboard() {
       ? "Toàn bộ nhân viên"
       : employeesById.get(Number(selectedEmployee))?.name || "Nhân viên";
 
+  const filteredEmployees = useMemo(() => {
+    const keyword = normalizeText(employeeSearch);
+    if (!keyword) return employees;
+    return employees.filter((employee) =>
+      [
+        employee.name,
+        employee.email,
+        employee.phone,
+        `NV-${employee.employee_id}`,
+      ].some((value) => normalizeText(value).includes(keyword)),
+    );
+  }, [employeeSearch, employees]);
+
   const saveCards = () => {
     const nextCards = draftCards.slice(0, 4);
     setSelectedCards(nextCards);
@@ -937,30 +955,84 @@ export default function Dashboard() {
         })}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="rounded-md border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="grid gap-1.5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="rounded-md border border-gray-200 bg-white p-2 shadow-sm sm:p-5">
           <div>
-            <Typography variant="h6" className="font-bold text-gray-950">
+            <Typography variant="h6" className="text-sm font-bold text-gray-950 sm:text-lg">
               Năng suất nhân viên
             </Typography>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[190px_150px_190px_190px] lg:gap-x-7">
-            <Select
-              label="Nhân viên"
-              value={selectedEmployee}
-              onChange={(value) => setSelectedEmployee(value || "all")}
-            >
-              <Option value="all">Tất cả nhân viên</Option>
-              {employees.map((employee) => (
-                <Option
-                  key={employee.employee_id}
-                  value={String(employee.employee_id)}
-                >
-                  {employee.name}
-                </Option>
-              ))}
-            </Select>
+          <div className="mt-1.5 grid gap-1 sm:mt-4 sm:grid-cols-2 sm:gap-3 lg:grid-cols-[190px_150px_190px_190px] lg:gap-x-7">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setEmployeePickerOpen((open) => !open)}
+                className="flex h-7 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-2 text-left text-[11px] font-medium text-gray-900 outline-none transition hover:border-blue-500 focus:border-blue-600 sm:h-10 sm:px-3 sm:text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {selectedEmployeeLabel}
+                </span>
+                <UserGroupIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 sm:h-5 sm:w-5" />
+              </button>
+              {employeePickerOpen && (
+                <div className="absolute left-0 top-12 z-40 w-full rounded-md border border-gray-200 bg-white p-2 shadow-xl">
+                  <div className="relative mb-2">
+                    <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={employeeSearch}
+                      onChange={(event) =>
+                        setEmployeeSearch(event.target.value)
+                      }
+                      placeholder="Tìm nhân viên..."
+                      className="h-9 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployee("all");
+                        setEmployeePickerOpen(false);
+                        setEmployeeSearch("");
+                      }}
+                      className={`w-full rounded-md px-3 py-2 text-left text-sm font-bold transition ${
+                        selectedEmployee === "all"
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      Tất cả nhân viên
+                    </button>
+                    {filteredEmployees.map((employee) => (
+                      <button
+                        key={employee.employee_id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedEmployee(String(employee.employee_id));
+                          setEmployeePickerOpen(false);
+                          setEmployeeSearch("");
+                        }}
+                        className={`w-full rounded-md px-3 py-2 text-left transition ${
+                          String(employee.employee_id) === selectedEmployee
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="truncate text-sm font-bold">
+                          {employee.name}
+                        </div>
+                        <div className="truncate text-xs font-medium text-gray-500">
+                          {employee.email ||
+                            employee.phone ||
+                            `NV-${employee.employee_id}`}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <Select
               label="Thời gian"
               value={dateMode}
@@ -975,7 +1047,7 @@ export default function Dashboard() {
                 type="month"
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="h-10 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-800 outline-none focus:border-blue-600 lg:ml-8"
+                className="h-7 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-gray-800 outline-none focus:border-blue-600 sm:h-10 sm:px-3 sm:text-sm lg:ml-8"
               />
             )}
             {dateMode === "custom" && (
@@ -989,7 +1061,7 @@ export default function Dashboard() {
                       startDate: event.target.value,
                     }))
                   }
-                  className="h-10 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-800 outline-none focus:border-blue-600 lg:ml-8"
+                  className="h-7 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-gray-800 outline-none focus:border-blue-600 sm:h-10 sm:px-3 sm:text-sm lg:ml-8"
                 />
                 <input
                   type="date"
@@ -1000,44 +1072,44 @@ export default function Dashboard() {
                       endDate: event.target.value,
                     }))
                   }
-                  className="h-10 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-800 outline-none focus:border-blue-600"
+                  className="h-7 rounded-md border border-gray-300 px-2 text-[11px] font-medium text-gray-800 outline-none focus:border-blue-600 sm:h-10 sm:px-3 sm:text-sm"
                 />
               </>
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-gray-600">
-            <span className="rounded-md bg-gray-100 px-3 py-2">
+          <div className="mt-1.5 flex flex-wrap gap-1 text-[9px] font-semibold text-gray-600 sm:mt-4 sm:gap-2 sm:text-xs">
+            <span className="rounded-md bg-gray-100 px-1 py-0.5 sm:px-3 sm:py-2">
               {selectedEmployeeLabel}
             </span>
-            <span className="rounded-md bg-blue-50 px-3 py-2 text-blue-700">
+            <span className="rounded-md bg-blue-50 px-1 py-0.5 text-blue-700 sm:px-3 sm:py-2">
               Tổng số ca: {formatNumber(totals.totalShifts)}
             </span>
-            <span className="rounded-md bg-orange-50 px-3 py-2 text-orange-700">
+            <span className="rounded-md bg-orange-50 px-1 py-0.5 text-orange-700 sm:px-3 sm:py-2">
               Số lần trễ: {formatNumber(totals.lateCount)}
             </span>
-            <span className="rounded-md bg-red-50 px-3 py-2 text-red-700 ring-1 ring-inset ring-red-100">
+            <span className="rounded-md bg-red-50 px-1 py-0.5 text-red-700 ring-1 ring-inset ring-red-100 sm:px-3 sm:py-2">
               Nghỉ phép: {formatNumber(totals.leaveToday)}
             </span>
-            <span className="rounded-md bg-green-50 px-3 py-2 text-green-700">
+            <span className="rounded-md bg-green-50 px-1 py-0.5 text-green-700 sm:px-3 sm:py-2">
               Ca đã làm: {formatNumber(totals.completedCount)}
             </span>
-            <span className="rounded-md bg-black px-3 py-2 text-white">
+            <span className="rounded-md bg-black px-1 py-0.5 text-white sm:px-3 sm:py-2">
               Chưa chấm công: {formatNumber(totals.missingCount)}
             </span>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-1.5 sm:mt-5">
             {loading ? (
-              <div className="flex h-64 items-center justify-center">
-                <Spinner className="h-8 w-8 text-blue-600" />
+              <div className="flex h-28 items-center justify-center sm:h-64">
+                <Spinner className="h-6 w-6 text-blue-600 sm:h-8 sm:w-8" />
               </div>
             ) : (
               <LineChart data={trendData} />
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-gray-500">
+          <div className="mt-1 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[9px] font-semibold text-gray-500 sm:mt-3 sm:gap-4 sm:text-xs">
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
               Tổng ca
@@ -1061,19 +1133,22 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card className="rounded-md border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+        <Card className="rounded-md border border-gray-200 bg-white p-2 shadow-sm sm:p-5">
           <div className="flex items-center justify-between">
             <div>
-              <Typography variant="h6" className="font-bold text-gray-950">
+              <Typography
+                variant="h6"
+                className="text-xs font-bold text-gray-950 sm:text-lg"
+              >
                 Ranking siêng năng
               </Typography>
-              <Typography className="text-sm text-gray-500">
+              <Typography className="text-[10px] text-gray-500 sm:text-sm">
                 Nhiều ca, nhiều giờ, ít trễ.
               </Typography>
             </div>
-            <TrophyIcon className="h-6 w-6 text-amber-500" />
+            <TrophyIcon className="h-3.5 w-3.5 text-amber-500 sm:h-6 sm:w-6" />
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-1.5 space-y-1 sm:mt-5 sm:space-y-3">
             {ranking.length === 0 ? (
               <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-medium text-gray-500">
                 Chưa có dữ liệu xếp hạng
@@ -1082,16 +1157,16 @@ export default function Dashboard() {
               ranking.map((employee, index) => (
                 <div
                   key={employee.employee_id}
-                  className="flex items-center gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-3"
+                  className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50 px-1.5 py-1 sm:gap-3 sm:px-3 sm:py-3"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-sm font-bold text-gray-900 shadow-sm">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white text-[10px] font-bold text-gray-900 shadow-sm sm:h-9 sm:w-9 sm:text-sm">
                     {index + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-gray-950">
+                    <div className="truncate text-[10px] font-bold text-gray-950 sm:text-sm">
                       {employee.name}
                     </div>
-                    <div className="mt-1 text-xs font-medium text-gray-500">
+                    <div className="truncate text-[9px] font-medium text-gray-500 sm:mt-1 sm:text-xs">
                       {formatNumber(employee.total_shifts)} ca ·{" "}
                       {formatNumber(employee.total_hours, 1)}h ·{" "}
                       {formatNumber(employee.late)} trễ ·{" "}
