@@ -96,6 +96,14 @@ function scheduleStart(schedule) {
 }
 
 function shiftTone(schedule) {
+  if (schedule.color) {
+    return {
+      background: `${schedule.color}18`,
+      text: schedule.color,
+      dot: schedule.color,
+    };
+  }
+
   const index = Math.abs(Number(schedule.shift_id || 0)) % shiftPalette.length;
   return shiftPalette[index];
 }

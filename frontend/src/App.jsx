@@ -4,7 +4,6 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import EmployeePage from "./pages/EmployeePage";
 import ShiftsCalendar from "./pages/ShiftsCalendar";
-import ShiftManagement from "./pages/ShiftManagement";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AvailabilityPage from "./pages/AvailabilityPage";
 import NotificationPage from "./pages/NotificationPage";
@@ -50,14 +49,7 @@ function App() {
 
         <Route path="userPage" element={<Navigate to="/employeePage" />} />
 
-        <Route
-          path="shiftManagement"
-          element={
-            <ProtectedRoute roles={["ADMIN"]}>
-              <ShiftManagement />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="shiftManagement" element={<Navigate to="/createSchedule" />} />
 
         <Route
           path="shiftSwaps"

@@ -333,6 +333,7 @@ async function getSchedulesByFilters({ employeeId, month, year }) {
       e.name as employee_name,
       s.shift_id,
       sh.shift_name,
+      sh.color,
       TIME_FORMAT(sh.start_time, '%H:%i:%s') as start_time,
       TIME_FORMAT(sh.end_time, '%H:%i:%s') as end_time,
       DATE_FORMAT(s.work_date, '%Y-%m-%d') as work_date,
@@ -704,7 +705,7 @@ export async function createSingleSchedule(req, res) {
 export async function updateSingleSchedule(req, res) {
   try {
     const { id } = req.params;
-    const { employee_id, shift_id, work_date } = req.body;
+    const { employee_id, shift_id, work_date, status = "PUBLISHED" } = req.body;
     const userId = req.user?.user_id;
 
     // Validate admin role
@@ -719,11 +720,12 @@ export async function updateSingleSchedule(req, res) {
 
     console.log("[updateSingleSchedule] Updating schedule", id, ":", { employee_id, shift_id, work_date });
 
+    const scheduleStatus = status === "DRAFT" ? "DRAFT" : "PUBLISHED";
     const [result] = await database.query(
       `UPDATE schedules 
-       SET employee_id = ?, shift_id = ?, work_date = ?
+       SET employee_id = ?, shift_id = ?, work_date = ?, status = ?
        WHERE schedule_id = ?`,
-      [employee_id, shift_id, work_date, id]
+      [employee_id, shift_id, work_date, scheduleStatus, id]
     );
 
     if (result.affectedRows === 0) {

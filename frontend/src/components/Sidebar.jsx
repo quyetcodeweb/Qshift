@@ -195,15 +195,6 @@ export default function Sidebar() {
                 )}
 
                 {role === "ADMIN" && (
-                  <Link to="/shiftManagement" className="block no-underline">
-                    <ListItem className={`${baseItem} ${hoverItem} pl-10 ${isActive("/shiftManagement") ? activeItem : ""}`}>
-                      <ChevronRightIcon className="h-3 w-3 opacity-70" />
-                      Quản lý ca
-                    </ListItem>
-                  </Link>
-                )}
-
-                {role === "ADMIN" && (
                   <Link to="/shiftSwaps" className="block no-underline">
                     <ListItem className={`${baseItem} ${hoverItem} pl-10 ${isActive("/shiftSwaps") ? activeItem : ""}`}>
                       <ChevronRightIcon className="h-3 w-3 opacity-70" />
