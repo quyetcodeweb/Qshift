@@ -14,7 +14,7 @@ export const createShift = async (req, res) => {
     await shiftService.addShift(req.body);
     res.json({ message: "Created" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 };
 
@@ -23,7 +23,7 @@ export const updateShift = async (req, res) => {
     await shiftService.editShift(req.params.id, req.body);
     res.json({ message: "Updated" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 };
 

@@ -253,6 +253,32 @@ export const runMigrations = async () => {
       console.warn("Could not ensure employees.avatar_url:", e.message);
     }
 
+    try {
+      const profileColumns = [
+        ["address", "TEXT DEFAULT NULL AFTER avatar_url"],
+        ["birth_date", "DATE DEFAULT NULL AFTER address"],
+        ["gender", "VARCHAR(30) DEFAULT NULL AFTER birth_date"],
+        ["emergency_contact", "VARCHAR(255) DEFAULT NULL AFTER gender"],
+        ["emergency_phone", "VARCHAR(50) DEFAULT NULL AFTER emergency_contact"],
+      ];
+
+      for (const [columnName, columnDefinition] of profileColumns) {
+        const [employeeProfileColumns] = await db.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+           WHERE TABLE_NAME='employees' AND COLUMN_NAME=? AND TABLE_SCHEMA=DATABASE()`,
+          [columnName]
+        );
+
+        if (employeeProfileColumns.length === 0) {
+          await db.query(
+            `ALTER TABLE employees ADD COLUMN ${columnName} ${columnDefinition}`
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Could not ensure employee profile columns:", e.message);
+    }
+
     // Ensure payroll feedback table exists
     try {
       const [payrollFeedbackTable] = await db.query(

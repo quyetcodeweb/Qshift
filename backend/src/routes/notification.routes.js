@@ -4,6 +4,7 @@ import {
   getNotifications,
   markRead,
   markAllRead,
+  deleteNotifications,
 } from "../controllers/notification.controller.js";
 
 const router = express.Router();
@@ -11,6 +12,7 @@ const router = express.Router();
 router.post("/send", sendAvailabilityRequest);
 router.get("/", getNotifications);
 router.patch("/read-all", markAllRead);
+router.delete("/", deleteNotifications);
 router.patch("/:id", markRead);
 
 export default router;

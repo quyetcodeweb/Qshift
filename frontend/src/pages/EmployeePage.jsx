@@ -37,6 +37,11 @@ const defaultForm = {
   name: "",
   email: "",
   phone: "",
+  address: "",
+  birth_date: "",
+  gender: "",
+  emergency_contact: "",
+  emergency_phone: "",
   hourly_rate: "",
   hire_date: "",
   status: "Đang làm việc",
@@ -44,6 +49,7 @@ const defaultForm = {
 };
 
 const statusOptions = ["Đang làm việc", "Nghỉ phép", "Thử việc"];
+const genderOptions = ["Nam", "Nữ", "Khác"];
 const pageSize = 8;
 const colors = [
   { name: "Xanh", value: "#2563eb" },
@@ -212,6 +218,10 @@ export default function EmployeePage() {
         employee.name,
         employee.email,
         employee.phone,
+        employee.address,
+        employee.gender,
+        employee.emergency_contact,
+        employee.emergency_phone,
         user?.username,
         user?.role,
       ].some((value) => normalize(value).includes(keyword)),
@@ -306,6 +316,11 @@ export default function EmployeePage() {
       name: employee.name || "",
       email: employee.email || "",
       phone: employee.phone || "",
+      address: employee.address || "",
+      birth_date: employee.birth_date ? String(employee.birth_date).slice(0, 10) : "",
+      gender: employee.gender || "",
+      emergency_contact: employee.emergency_contact || "",
+      emergency_phone: employee.emergency_phone || "",
       hourly_rate: employee.hourly_rate || "",
       hire_date: employee.hire_date ? String(employee.hire_date).slice(0, 10) : "",
       status: displayStatus(employee.status),
@@ -603,6 +618,9 @@ export default function EmployeePage() {
                         <div className="mt-1 text-xs font-medium text-gray-500">
                           {employee.phone || "-"}
                         </div>
+                        <div className="mt-1 max-w-[260px] truncate text-xs font-medium text-gray-400">
+                          {employee.address || "Chưa cập nhật địa chỉ"}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         <span
@@ -740,6 +758,17 @@ export default function EmployeePage() {
                       ["Tên đăng nhập", profileUser?.username || "-"],
                       ["Role", roleText(profileUser)],
                       ["Email", selectedEmployee.email || "-"],
+                      ["Ngay sinh", formatDate(selectedEmployee.birth_date)],
+                      ["Gioi tinh", selectedEmployee.gender || "-"],
+                      ["Dia chi", selectedEmployee.address || "-"],
+                      [
+                        "Nguoi lien he khan cap",
+                        selectedEmployee.emergency_contact || "-",
+                      ],
+                      [
+                        "SDT khan cap",
+                        selectedEmployee.emergency_phone || "-",
+                      ],
                       ["Số điện thoại", selectedEmployee.phone || "-"],
                       [
                         "Trạng thái hồ sơ",
@@ -857,6 +886,52 @@ export default function EmployeePage() {
                 setForm({ ...form, hourly_rate: event.target.value })
               }
             />
+            <Input
+              type="date"
+              label="Ngay sinh"
+              value={form.birth_date}
+              onChange={(event) =>
+                setForm({ ...form, birth_date: event.target.value })
+              }
+            />
+            <Select
+              label="Gioi tinh"
+              value={form.gender}
+              onChange={(value) => setForm({ ...form, gender: value || "" })}
+            >
+              {genderOptions.map((option) => (
+                <Option key={option} value={option}>
+                  {option}
+                </Option>
+              ))}
+            </Select>
+            <Input
+              label="Nguoi lien he khan cap"
+              value={form.emergency_contact}
+              onChange={(event) =>
+                setForm({ ...form, emergency_contact: event.target.value })
+              }
+            />
+            <Input
+              label="SDT khan cap"
+              value={form.emergency_phone}
+              onChange={(event) =>
+                setForm({ ...form, emergency_phone: event.target.value })
+              }
+            />
+            <label className="sm:col-span-2">
+              <span className="mb-2 block text-sm font-medium text-blue-gray-500">
+                Dia chi
+              </span>
+              <textarea
+                value={form.address}
+                onChange={(event) =>
+                  setForm({ ...form, address: event.target.value })
+                }
+                rows={3}
+                className="w-full resize-none rounded-md border border-blue-gray-200 bg-transparent px-3 py-2.5 text-sm font-normal text-blue-gray-700 outline outline-0 transition-all placeholder-shown:border-blue-gray-200 focus:border-gray-900 focus:outline-0"
+              />
+            </label>
             <Input
               type="date"
               label="Ngày vào làm"

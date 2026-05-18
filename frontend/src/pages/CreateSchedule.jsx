@@ -110,6 +110,33 @@ function isHexColor(value) {
   return /^#[0-9A-Fa-f]{6}$/.test(value || "");
 }
 
+function timeToMinutes(value) {
+  const [hours = 0, minutes = 0] = String(value || "00:00")
+    .slice(0, 5)
+    .split(":")
+    .map(Number);
+  return hours * 60 + minutes;
+}
+
+function timeRanges(startTime, endTime) {
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  if (start === end) return [];
+  if (end > start) return [[start, end]];
+  return [
+    [start, 1440],
+    [0, end],
+  ];
+}
+
+function hasTimeOverlap(aStart, aEnd, bStart, bEnd) {
+  const first = timeRanges(aStart, aEnd);
+  const second = timeRanges(bStart, bEnd);
+  return first.some(([start, end]) =>
+    second.some(([otherStart, otherEnd]) => start < otherEnd && otherStart < end),
+  );
+}
+
 export default function CreateSchedule() {
   const [schedules, setSchedules] = useState([]);
   const [shifts, setShifts] = useState([]);
@@ -418,6 +445,24 @@ export default function CreateSchedule() {
 
     if (!isHexColor(shiftForm.color)) {
       alert("Vui lòng nhập mã màu HEX hợp lệ, ví dụ #2563eb");
+      return;
+    }
+
+    const conflictShift = shifts.find(
+      (shift) =>
+        String(shift.shift_id) !== String(editingShift?.shift_id || "") &&
+        hasTimeOverlap(
+          shiftForm.start_time,
+          shiftForm.end_time,
+          shift.start_time,
+          shift.end_time,
+        ),
+    );
+
+    if (conflictShift) {
+      alert(
+        `Không thể lưu ca vì bị trùng thời gian với "${conflictShift.shift_name}" (${formatTime(conflictShift.start_time)} - ${formatTime(conflictShift.end_time)})`,
+      );
       return;
     }
 

@@ -1,6 +1,27 @@
 import db from "../config/db.js";
 import { sendFillRequestToEmployees } from "../services/availability.service.js";
 
+async function ensureLateRequestTable() {
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS attendance_late_requests (
+      late_request_id INT AUTO_INCREMENT PRIMARY KEY,
+      employee_id INT NOT NULL,
+      schedule_id INT NOT NULL,
+      requested_minutes INT NOT NULL,
+      late_until DATETIME NOT NULL,
+      status VARCHAR(20) DEFAULT 'PENDING',
+      reason TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      decided_at DATETIME NULL,
+      FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+      FOREIGN KEY (schedule_id) REFERENCES schedules(schedule_id) ON DELETE CASCADE,
+      INDEX idx_late_request_employee (employee_id),
+      INDEX idx_late_request_schedule (schedule_id),
+      INDEX idx_late_request_status (status)
+    )`
+  );
+}
+
 export const sendAvailabilityRequest = async (req, res) => {
   try {
     const { month, year } = req.body;
@@ -24,6 +45,8 @@ export const getNotifications = async (req, res) => {
   if (!user_id) {
     return res.status(400).json({ message: "Missing user_id" });
   }
+
+  await ensureLateRequestTable();
 
   const [rows] = await db.query(
     `SELECT n.*,
@@ -49,7 +72,16 @@ export const getNotifications = async (req, res) => {
             DATE_FORMAT(sts.work_date, '%Y-%m-%d') as swap_target_work_date,
             stsh.shift_name as swap_target_shift_name,
             TIME_FORMAT(stsh.start_time, '%H:%i:%s') as swap_target_start_time,
-            TIME_FORMAT(stsh.end_time, '%H:%i:%s') as swap_target_end_time
+            TIME_FORMAT(stsh.end_time, '%H:%i:%s') as swap_target_end_time,
+            lr.late_request_id,
+            lr.status as late_request_status,
+            lr.requested_minutes as late_requested_minutes,
+            lr.reason as late_request_reason,
+            lre.name as late_employee_name,
+            DATE_FORMAT(lrs.work_date, '%Y-%m-%d') as late_work_date,
+            lrsh.shift_name as late_shift_name,
+            TIME_FORMAT(lrsh.start_time, '%H:%i:%s') as late_start_time,
+            TIME_FORMAT(lrsh.end_time, '%H:%i:%s') as late_end_time
      FROM notifications n
      LEFT JOIN availability_requests ar ON n.ref_id = ar.id
      LEFT JOIN employees e ON ar.employee_id = e.employee_id
@@ -64,6 +96,11 @@ export const getNotifications = async (req, res) => {
      LEFT JOIN shifts srsh ON srs.shift_id = srsh.shift_id
      LEFT JOIN schedules sts ON sr.target_schedule_id = sts.schedule_id
      LEFT JOIN shifts stsh ON sts.shift_id = stsh.shift_id
+     LEFT JOIN attendance_late_requests lr ON n.ref_id = lr.late_request_id
+       AND n.type LIKE 'ATTENDANCE_LATE%'
+     LEFT JOIN employees lre ON lr.employee_id = lre.employee_id
+     LEFT JOIN schedules lrs ON lr.schedule_id = lrs.schedule_id
+     LEFT JOIN shifts lrsh ON lrs.shift_id = lrsh.shift_id
      WHERE n.user_id=? 
      ORDER BY n.created_at DESC`,
     [user_id]
@@ -93,4 +130,27 @@ export const markAllRead = async (req, res) => {
   ]);
 
   res.json({ message: "ok" });
+};
+
+export const deleteNotifications = async (req, res) => {
+  const user_id = Number(req.headers["user-id"]);
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.map(Number).filter(Boolean)
+    : [];
+
+  if (!user_id) {
+    return res.status(400).json({ message: "Missing user_id" });
+  }
+
+  if (!ids.length) {
+    return res.status(400).json({ message: "Missing notification ids" });
+  }
+
+  const placeholders = ids.map(() => "?").join(",");
+  const [result] = await db.query(
+    `DELETE FROM notifications WHERE user_id=? AND notification_id IN (${placeholders})`,
+    [user_id, ...ids],
+  );
+
+  res.json({ message: "ok", deleted: result.affectedRows || 0 });
 };

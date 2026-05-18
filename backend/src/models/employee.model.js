@@ -1,11 +1,28 @@
 import db from "../config/db.js";
 
+function toMysqlDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    return value.slice(0, 10) || null;
+  }
+  return null;
+}
+
 export const createEmployee = async (data) => {
   const {
     user_id,
     name,
     email,
     phone,
+    avatar_url,
+    address,
+    birth_date,
+    gender,
+    emergency_contact,
+    emergency_phone,
     hourly_rate,
     hire_date,
     status,
@@ -13,9 +30,23 @@ export const createEmployee = async (data) => {
 
   await db.query(
     `INSERT INTO employees 
-    (user_id, name, email, phone, hourly_rate, hire_date, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [user_id, name, email, phone, hourly_rate, hire_date, status]
+    (user_id, name, email, phone, avatar_url, address, birth_date, gender, emergency_contact, emergency_phone, hourly_rate, hire_date, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      user_id,
+      name,
+      email,
+      phone,
+      avatar_url || null,
+      address || null,
+      birth_date || null,
+      gender || null,
+      emergency_contact || null,
+      emergency_phone || null,
+      hourly_rate,
+      toMysqlDate(hire_date),
+      status,
+    ]
   );
 };
 
@@ -61,6 +92,11 @@ export const updateEmployee = async (employeeId, data) => {
     email,
     phone,
     avatar_url,
+    address,
+    birth_date,
+    gender,
+    emergency_contact,
+    emergency_phone,
     hourly_rate,
     hire_date,
     status,
@@ -68,9 +104,23 @@ export const updateEmployee = async (employeeId, data) => {
 
   await db.query(
     `UPDATE employees
-     SET name = ?, email = ?, phone = ?, avatar_url = ?, hourly_rate = ?, hire_date = ?, status = ?
+     SET name = ?, email = ?, phone = ?, avatar_url = ?, address = ?, birth_date = ?, gender = ?, emergency_contact = ?, emergency_phone = ?, hourly_rate = ?, hire_date = ?, status = ?
      WHERE employee_id = ?`,
-    [name, email, phone, avatar_url || null, hourly_rate, hire_date || null, status, employeeId]
+    [
+      name,
+      email,
+      phone,
+      avatar_url || null,
+      address || null,
+      toMysqlDate(birth_date),
+      gender || null,
+      emergency_contact || null,
+      emergency_phone || null,
+      hourly_rate,
+      toMysqlDate(hire_date),
+      status,
+      employeeId,
+    ]
   );
 
   return getEmployeeById(employeeId);

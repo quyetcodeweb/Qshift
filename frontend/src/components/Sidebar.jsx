@@ -297,6 +297,7 @@ export default function Sidebar() {
             </Link>
           )}
 
+          {role === "EMPLOYEE" && (
           <Link to="/profile" className="block no-underline">
             <ListItem className={`${baseItem} ${hoverItem} ${isActive("/profile") ? activeItem : ""}`}>
               <ListItemPrefix className="min-w-[24px]">
@@ -305,6 +306,7 @@ export default function Sidebar() {
               Hồ sơ
             </ListItem>
           </Link>
+          )}
         </List>
       </div>
 

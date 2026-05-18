@@ -80,7 +80,9 @@ function MobileChrome() {
     { to: "/attendance", label: "Công", icon: ClockIcon },
     { to: "/profile", label: "Hồ sơ", icon: UserCircleIcon },
   ];
-  const items = role === "ADMIN" ? adminItems : employeeItems;
+  const items = role === "ADMIN"
+    ? adminItems.filter((item) => item.to !== "/profile")
+    : employeeItems;
 
   return (
     <>

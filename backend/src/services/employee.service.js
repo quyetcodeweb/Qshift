@@ -7,6 +7,12 @@ export const createEmployee = async (data) => {
     name,
     email,
     phone,
+    avatar_url,
+    address,
+    birth_date,
+    gender,
+    emergency_contact,
+    emergency_phone,
     hourly_rate,
     hire_date,
     status,
@@ -39,9 +45,23 @@ export const createEmployee = async (data) => {
     // 2. tạo employee
     const [employeeResult] = await conn.query(
       `INSERT INTO employees 
-      (user_id, name, email, phone, hourly_rate, hire_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [user_id, name, email, phone, hourly_rate, hire_date, status]
+      (user_id, name, email, phone, avatar_url, address, birth_date, gender, emergency_contact, emergency_phone, hourly_rate, hire_date, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        user_id,
+        name,
+        email,
+        phone,
+        avatar_url || null,
+        address || null,
+        birth_date || null,
+        gender || null,
+        emergency_contact || null,
+        emergency_phone || null,
+        hourly_rate,
+        hire_date,
+        status,
+      ]
     );
 
     await conn.commit();

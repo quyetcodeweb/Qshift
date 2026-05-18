@@ -4,6 +4,8 @@ import {
   getAttendanceHistory,
   getTodayAttendance,
   markAttendance,
+  requestLateAttendance,
+  respondLateAttendance,
 } from "../controllers/attendance.controller.js";
 
 const router = express.Router();
@@ -11,5 +13,7 @@ const router = express.Router();
 router.get("/today", verifyToken, getTodayAttendance);
 router.get("/history", verifyToken, getAttendanceHistory);
 router.post("/mark", verifyToken, markAttendance);
+router.post("/late-request", verifyToken, requestLateAttendance);
+router.post("/late-request/:id/respond", verifyToken, respondLateAttendance);
 
 export default router;
