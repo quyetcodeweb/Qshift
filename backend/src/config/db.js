@@ -3,6 +3,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const ssl =
+  process.env.DB_SSL === "false"
+    ? undefined
+    : {
+        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === "true",
+      };
+
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT || 3306),
@@ -12,7 +19,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  ssl: { rejectUnauthorized: false },
+  ssl,
 });
 
 export default pool;

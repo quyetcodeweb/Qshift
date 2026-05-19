@@ -1,7 +1,86 @@
 import db from "../config/db.js";
 
+const columnExists = async (tableName, columnName) => {
+  const [columns] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
+    [tableName, columnName]
+  );
+
+  return columns.length > 0;
+};
+
+const tableExists = async (tableName) => {
+  const [tables] = await db.query(
+    `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?`,
+    [tableName]
+  );
+
+  return tables.length > 0;
+};
+
+const ensureAvailabilityTables = async () => {
+  try {
+    if (!(await tableExists("employee_availability"))) {
+      console.log("Running migration: Create employee_availability table...");
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS employee_availability (
+          availability_id INT AUTO_INCREMENT PRIMARY KEY,
+          employee_id INT NOT NULL,
+          shift_id INT NOT NULL,
+          work_date DATE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_employee_availability (employee_id, shift_id, work_date),
+          FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+          FOREIGN KEY (shift_id) REFERENCES shifts(shift_id) ON DELETE CASCADE,
+          INDEX idx_employee_availability_month (employee_id, work_date)
+        )
+      `);
+      console.log("Created employee_availability table");
+    } else if (!(await columnExists("employee_availability", "work_date"))) {
+      console.log("Running migration: Add work_date to employee_availability...");
+      if (await columnExists("employee_availability", "day_of_week")) {
+        await db.query("ALTER TABLE employee_availability CHANGE day_of_week work_date DATE");
+      } else {
+        await db.query("ALTER TABLE employee_availability ADD COLUMN work_date DATE NULL AFTER shift_id");
+      }
+      console.log("Ensured employee_availability.work_date");
+    }
+  } catch (e) {
+    console.warn("Could not ensure employee_availability table:", e.message);
+  }
+
+  try {
+    if (!(await tableExists("availability_requests"))) {
+      console.log("Running migration: Create availability_requests table...");
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS availability_requests (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          employee_id INT DEFAULT NULL,
+          month INT NOT NULL,
+          year INT NOT NULL,
+          data JSON,
+          status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+          FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+          INDEX idx_availability_requests_user (user_id),
+          INDEX idx_availability_requests_employee_month (employee_id, month, year)
+        )
+      `);
+      console.log("Created availability_requests table");
+    }
+  } catch (e) {
+    console.warn("Could not ensure availability_requests table:", e.message);
+  }
+};
+
 export const runMigrations = async () => {
   try {
+    await ensureAvailabilityTables();
+
     console.log("🔄 Checking for pending migrations...");
 
     // Check if schedules table exists
