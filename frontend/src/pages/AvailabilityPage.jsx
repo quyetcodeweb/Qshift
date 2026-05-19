@@ -59,7 +59,7 @@ export default function AvailabilityPage() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user?.role;
   const userId = user?.user_id;
-  const employeeAccess = readAccess();
+  const employeeAccess = useMemo(() => readAccess(), []);
   const searchParams = new URLSearchParams(window.location.search);
   const requestedMonth = Number(employeeAccess?.month || searchParams.get("month"));
   const requestedYear = Number(employeeAccess?.year || searchParams.get("year"));
