@@ -30,6 +30,23 @@ const shiftPalette = [
   { background: "#fff1f2", text: "#9f1239", dot: "#f43f5e" },
 ];
 
+const namedShiftColors = {
+  blue: "#2563eb",
+  green: "#059669",
+  emerald: "#059669",
+  orange: "#f97316",
+  amber: "#f59e0b",
+  yellow: "#ca8a04",
+  red: "#dc2626",
+  rose: "#e11d48",
+  purple: "#7c3aed",
+  violet: "#7c3aed",
+  cyan: "#0891b2",
+  sky: "#0284c7",
+  gray: "#4b5563",
+  slate: "#475569",
+};
+
 const viewOptions = [
   { value: "month", label: "Tháng" },
   { value: "week", label: "Tuần" },
@@ -95,12 +112,35 @@ function scheduleStart(schedule) {
   return new Date(`${schedule.work_date}T${schedule.start_time || "00:00:00"}`);
 }
 
+function normalizeColor(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+  return namedShiftColors[raw] || null;
+}
+
+function hexToRgb(hex) {
+  const normalized = normalizeColor(hex);
+  if (!normalized) return null;
+
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
 function shiftTone(schedule) {
-  if (schedule.color) {
+  const color = normalizeColor(schedule.color);
+  const rgb = hexToRgb(color);
+
+  if (color && rgb) {
     return {
-      background: `${schedule.color}18`,
-      text: schedule.color,
-      dot: schedule.color,
+      background: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`,
+      text: color,
+      dot: color,
     };
   }
 

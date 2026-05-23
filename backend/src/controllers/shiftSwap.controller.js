@@ -6,6 +6,14 @@ const TARGET_REJECTED_STATUS = "REJECTED_BY_TARGET";
 const ADMIN_CANCELLED_STATUS = "CANCELLED_BY_ADMIN";
 const ADMIN_REVERTED_STATUS = "REVERTED_BY_ADMIN";
 
+function getAuthUserId(req) {
+  return req.user?.user_id || req.user?.id;
+}
+
+async function getRequestRole(req) {
+  return (await getUserRole(getAuthUserId(req))) || req.user?.role || null;
+}
+
 async function ensureShiftSwapTable() {
   await database.query(`
     CREATE TABLE IF NOT EXISTS shift_swap_requests (
@@ -94,12 +102,12 @@ async function getSwapRequestById(id, connection = database) {
         TIME_FORMAT(tsh.start_time, '%H:%i:%s') AS target_start_time,
         TIME_FORMAT(tsh.end_time, '%H:%i:%s') AS target_end_time
       FROM shift_swap_requests sr
-      JOIN employees req ON sr.requester_employee_id = req.employee_id
-      JOIN employees tgt ON sr.target_employee_id = tgt.employee_id
-      JOIN schedules rs ON sr.requester_schedule_id = rs.schedule_id
-      JOIN shifts rsh ON rs.shift_id = rsh.shift_id
-      JOIN schedules ts ON sr.target_schedule_id = ts.schedule_id
-      JOIN shifts tsh ON ts.shift_id = tsh.shift_id
+      LEFT JOIN employees req ON sr.requester_employee_id = req.employee_id
+      LEFT JOIN employees tgt ON sr.target_employee_id = tgt.employee_id
+      LEFT JOIN schedules rs ON sr.requester_schedule_id = rs.schedule_id
+      LEFT JOIN shifts rsh ON rs.shift_id = rsh.shift_id
+      LEFT JOIN schedules ts ON sr.target_schedule_id = ts.schedule_id
+      LEFT JOIN shifts tsh ON ts.shift_id = tsh.shift_id
       WHERE sr.swap_request_id = ?
     `,
     [id],
@@ -135,12 +143,12 @@ async function listSwapRequests({ userId, role }) {
         TIME_FORMAT(tsh.start_time, '%H:%i:%s') AS target_start_time,
         TIME_FORMAT(tsh.end_time, '%H:%i:%s') AS target_end_time
       FROM shift_swap_requests sr
-      JOIN employees req ON sr.requester_employee_id = req.employee_id
-      JOIN employees tgt ON sr.target_employee_id = tgt.employee_id
-      JOIN schedules rs ON sr.requester_schedule_id = rs.schedule_id
-      JOIN shifts rsh ON rs.shift_id = rsh.shift_id
-      JOIN schedules ts ON sr.target_schedule_id = ts.schedule_id
-      JOIN shifts tsh ON ts.shift_id = tsh.shift_id
+      LEFT JOIN employees req ON sr.requester_employee_id = req.employee_id
+      LEFT JOIN employees tgt ON sr.target_employee_id = tgt.employee_id
+      LEFT JOIN schedules rs ON sr.requester_schedule_id = rs.schedule_id
+      LEFT JOIN shifts rsh ON rs.shift_id = rsh.shift_id
+      LEFT JOIN schedules ts ON sr.target_schedule_id = ts.schedule_id
+      LEFT JOIN shifts tsh ON ts.shift_id = tsh.shift_id
       ${where}
       ORDER BY sr.created_at DESC
     `,
@@ -180,7 +188,7 @@ async function findSwapConflicts(request, connection = database) {
 
 export async function getShiftSwapOptions(req, res) {
   try {
-    const userId = req.user?.user_id;
+    const userId = getAuthUserId(req);
     const employee = await getEmployeeByUserId(userId);
 
     if (!employee) {
@@ -222,7 +230,7 @@ export async function createShiftSwapRequest(req, res) {
   try {
     await ensureShiftSwapTable();
 
-    const requester = await getEmployeeByUserId(req.user?.user_id);
+    const requester = await getEmployeeByUserId(getAuthUserId(req));
     const {
       requester_schedule_id,
       target_schedule_id,
@@ -363,8 +371,8 @@ export async function createShiftSwapRequest(req, res) {
 
 export async function getShiftSwapRequests(req, res) {
   try {
-    const role = await getUserRole(req.user?.user_id);
-    const requests = await listSwapRequests({ userId: req.user?.user_id, role });
+    const role = await getRequestRole(req);
+    const requests = await listSwapRequests({ userId: getAuthUserId(req), role });
     res.json(requests);
   } catch (error) {
     console.error("[getShiftSwapRequests] Error:", error);
@@ -381,7 +389,7 @@ export async function respondToShiftSwapRequest(req, res) {
 
     const { id } = req.params;
     const action = req.body.action === "reject" ? "reject" : "accept";
-    const target = await getEmployeeByUserId(req.user?.user_id);
+    const target = await getEmployeeByUserId(getAuthUserId(req));
     const request = await getSwapRequestById(id, connection);
 
     if (!target || !request) {
@@ -473,7 +481,7 @@ export async function cancelShiftSwapByAdmin(req, res) {
   try {
     await ensureShiftSwapTable();
 
-    const role = await getUserRole(req.user?.user_id);
+    const role = await getRequestRole(req);
     if (role !== "ADMIN") {
       return res.status(403).json({ message: "Chỉ admin có quyền hủy yêu cầu" });
     }
@@ -517,7 +525,7 @@ export async function revertShiftSwapByAdmin(req, res) {
     await ensureShiftSwapTable();
     await connection.beginTransaction();
 
-    const role = await getUserRole(req.user?.user_id);
+    const role = await getRequestRole(req);
     if (role !== "ADMIN") {
       await connection.rollback();
       return res.status(403).json({ message: "Chỉ admin có quyền hoàn tác đổi ca" });
