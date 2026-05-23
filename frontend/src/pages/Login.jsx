@@ -17,20 +17,16 @@ export default function Login() {
       setLoading(true);
       setError("");
 
-      const res = await axios.post(
-        `${API_URL}/auth/login`,
-        form,
-      );
+      const res = await axios.post(`${API_URL}/auth/login`, form);
 
-      // 🔐 lưu token + user
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
 
-      // 👉 redirect về dashboard
       window.location.href = "/";
     } catch (err) {
       setError(
-        err.response?.data?.message ||
+        err.response?.data?.detail ||
+          err.response?.data?.message ||
           err.message ||
           "Không đăng nhập được",
       );
@@ -46,14 +42,12 @@ export default function Login() {
           Đăng nhập QShift
         </Typography>
 
-        {/* 🔥 FORM để dùng Enter */}
         <form
           onSubmit={(e) => {
-            e.preventDefault(); // ❗ không reload trang
+            e.preventDefault();
             handleLogin();
           }}
         >
-          {/* Username */}
           <div className="mb-4">
             <Input
               label="Username"
@@ -62,7 +56,6 @@ export default function Login() {
             />
           </div>
 
-          {/* Password */}
           <div className="mb-4">
             <Input
               type="password"
@@ -72,14 +65,12 @@ export default function Login() {
             />
           </div>
 
-          {/* Error */}
           {error && (
             <Typography color="red" className="mb-3 text-sm">
               {error}
             </Typography>
           )}
 
-          {/* Button */}
           <Button
             type="submit"
             fullWidth

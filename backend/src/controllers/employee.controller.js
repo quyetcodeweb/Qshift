@@ -10,7 +10,12 @@ export const createEmployee = async (req, res) => {
 };
 
 export const getEmployees = async (req, res) => {
-  res.json(await employeeService.getEmployees());
+  try {
+    res.json(await employeeService.getEmployees());
+  } catch (err) {
+    console.error("[getEmployees] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
 };
 
 export const getMyProfile = async (req, res) => {
@@ -23,6 +28,27 @@ export const getMyProfile = async (req, res) => {
 
     res.json(employee);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getEmployeeById = async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id);
+
+    if (!employeeId) {
+      return res.status(400).json({ message: "employee_id không hợp lệ" });
+    }
+
+    const employee = await employeeService.getEmployeeById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({ message: "Không tìm thấy nhân viên" });
+    }
+
+    res.json(employee);
+  } catch (err) {
+    console.error("[getEmployeeById] Error:", err);
     res.status(500).json({ error: err.message });
   }
 };

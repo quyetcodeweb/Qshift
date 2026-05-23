@@ -73,6 +73,7 @@ function MobileChrome() {
   ];
   const adminItems = [
     { to: "/", label: "Tổng quan", icon: HomeIcon },
+    { to: "/statistics", label: "Thống kê", icon: HomeIcon },
     { to: "/employeePage", label: "Nhân sự", icon: UsersIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
     { to: "/createSchedule", label: "Tạo lịch", icon: ClipboardDocumentListIcon },

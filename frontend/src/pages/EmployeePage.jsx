@@ -310,20 +310,30 @@ export default function EmployeePage() {
     setFormOpen(true);
   };
 
-  const openEditForm = (employee) => {
-    setEditingEmployee(employee);
+  const openEditForm = async (employee) => {
+    let detail = employee;
+    try {
+      const res = await axios.get(`${API_URL}/employees/${employee.employee_id}`, {
+        headers: authHeaders(),
+      });
+      detail = res.data || employee;
+    } catch (err) {
+      console.error("[EmployeePage] Load employee detail:", err);
+    }
+
+    setEditingEmployee(detail);
     setForm({
-      name: employee.name || "",
-      email: employee.email || "",
-      phone: employee.phone || "",
-      address: employee.address || "",
-      birth_date: employee.birth_date ? String(employee.birth_date).slice(0, 10) : "",
-      gender: employee.gender || "",
-      emergency_contact: employee.emergency_contact || "",
-      emergency_phone: employee.emergency_phone || "",
-      hourly_rate: employee.hourly_rate || "",
-      hire_date: employee.hire_date ? String(employee.hire_date).slice(0, 10) : "",
-      status: displayStatus(employee.status),
+      name: detail.name || "",
+      email: detail.email || "",
+      phone: detail.phone || "",
+      address: detail.address || "",
+      birth_date: detail.birth_date ? String(detail.birth_date).slice(0, 10) : "",
+      gender: detail.gender || "",
+      emergency_contact: detail.emergency_contact || "",
+      emergency_phone: detail.emergency_phone || "",
+      hourly_rate: detail.hourly_rate || "",
+      hire_date: detail.hire_date ? String(detail.hire_date).slice(0, 10) : "",
+      status: displayStatus(detail.status),
       password: "",
     });
     setFormOpen(true);

@@ -13,6 +13,7 @@ import AttendanceHistoryPage from "./pages/AttendanceHistoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import PayrollPage from "./pages/PayrollPage";
 import ShiftSwapManagementPage from "./pages/ShiftSwapManagementPage";
+import StatisticsPage from "./pages/StatisticsPage";
 import { isLoggedIn } from "./utils/auth";
 
 function App() {
@@ -36,6 +37,15 @@ function App() {
         <Route index element={<Dashboard />} />
 
         {/* ADMIN ONLY */}
+        <Route
+          path="statistics"
+          element={
+            <ProtectedRoute roles={["ADMIN"]}>
+              <StatisticsPage />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="employeePage"
           element={

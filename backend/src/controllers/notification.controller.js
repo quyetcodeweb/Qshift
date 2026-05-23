@@ -133,24 +133,39 @@ export const markAllRead = async (req, res) => {
 };
 
 export const deleteNotifications = async (req, res) => {
-  const user_id = Number(req.headers["user-id"]);
-  const ids = Array.isArray(req.body?.ids)
-    ? req.body.ids.map(Number).filter(Boolean)
-    : [];
+  try {
+    const user_id = Number(req.headers["user-id"]);
+    const ids = Array.isArray(req.body?.ids)
+      ? [...new Set(req.body.ids.map(Number).filter(Boolean))]
+      : [];
 
-  if (!user_id) {
-    return res.status(400).json({ message: "Missing user_id" });
+    if (!user_id) {
+      return res.status(400).json({ message: "Missing user_id" });
+    }
+
+    if (!ids.length) {
+      return res.status(400).json({ message: "Missing notification ids" });
+    }
+
+    let deleted = 0;
+    const batchSize = 500;
+
+    for (let index = 0; index < ids.length; index += batchSize) {
+      const batch = ids.slice(index, index + batchSize);
+      const placeholders = batch.map(() => "?").join(",");
+      const [result] = await db.query(
+        `DELETE FROM notifications WHERE user_id=? AND notification_id IN (${placeholders})`,
+        [user_id, ...batch],
+      );
+      deleted += result.affectedRows || 0;
+    }
+
+    res.json({ message: "ok", deleted });
+  } catch (err) {
+    console.error("DELETE NOTIFICATIONS ERROR:", err);
+    res.status(500).json({
+      message: "Không thể xóa thông báo",
+      detail: err.message,
+    });
   }
-
-  if (!ids.length) {
-    return res.status(400).json({ message: "Missing notification ids" });
-  }
-
-  const placeholders = ids.map(() => "?").join(",");
-  const [result] = await db.query(
-    `DELETE FROM notifications WHERE user_id=? AND notification_id IN (${placeholders})`,
-    [user_id, ...ids],
-  );
-
-  res.json({ message: "ok", deleted: result.affectedRows || 0 });
 };

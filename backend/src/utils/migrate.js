@@ -1,21 +1,22 @@
 import db from "../config/db.js";
 
+const assertIdentifier = (value) => {
+  if (!/^[A-Za-z0-9_]+$/.test(value)) {
+    throw new Error(`Invalid database identifier: ${value}`);
+  }
+};
+
 const columnExists = async (tableName, columnName) => {
-  const [columns] = await db.query(
-    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
-    [tableName, columnName]
-  );
+  assertIdentifier(tableName);
+  const [columns] = await db.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [
+    columnName,
+  ]);
 
   return columns.length > 0;
 };
 
 const tableExists = async (tableName) => {
-  const [tables] = await db.query(
-    `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?`,
-    [tableName]
-  );
+  const [tables] = await db.query("SHOW TABLES LIKE ?", [tableName]);
 
   return tables.length > 0;
 };
@@ -84,12 +85,7 @@ export const runMigrations = async () => {
     console.log("🔄 Checking for pending migrations...");
 
     // Check if schedules table exists
-    const [scheduleTable] = await db.query(
-      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-       WHERE TABLE_NAME='schedules' AND TABLE_SCHEMA=DATABASE()`
-    );
-
-    if (scheduleTable.length === 0) {
+    if (!(await tableExists("schedules"))) {
       console.log("⏳ Running migration: Create schedules table...");
       
       try {
@@ -118,12 +114,7 @@ export const runMigrations = async () => {
     }
 
     // Check if employee_id column exists
-    const [columns] = await db.query(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_NAME='availability_requests' AND COLUMN_NAME='employee_id'`
-    );
-
-    if (columns.length === 0) {
+    if (!(await columnExists("availability_requests", "employee_id"))) {
       console.log("⏳ Running migration: Add employee_id to availability_requests...");
       
       try {
@@ -163,12 +154,7 @@ export const runMigrations = async () => {
     }
 
     // Check if roles table exists
-    const [rolesTable] = await db.query(
-      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-       WHERE TABLE_NAME='roles' AND TABLE_SCHEMA=DATABASE()`
-    );
-
-    if (rolesTable.length === 0) {
+    if (!(await tableExists("roles"))) {
       console.log("⏳ Running migration: Create roles table...");
       
       try {
@@ -199,12 +185,7 @@ export const runMigrations = async () => {
     }
 
     // Check if employee_role_assignments table exists
-    const [assignmentTable] = await db.query(
-      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-       WHERE TABLE_NAME='employee_role_assignments' AND TABLE_SCHEMA=DATABASE()`
-    );
-
-    if (assignmentTable.length === 0) {
+    if (!(await tableExists("employee_role_assignments"))) {
       console.log("⏳ Running migration: Create employee_role_assignments table...");
       
       try {
@@ -226,12 +207,7 @@ export const runMigrations = async () => {
     }
 
     // Check if shift_role_requirements table exists
-    const [requirementTable] = await db.query(
-      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-       WHERE TABLE_NAME='shift_role_requirements' AND TABLE_SCHEMA=DATABASE()`
-    );
-
-    if (requirementTable.length === 0) {
+    if (!(await tableExists("shift_role_requirements"))) {
       console.log("⏳ Running migration: Create shift_role_requirements table...");
       
       try {
@@ -255,12 +231,7 @@ export const runMigrations = async () => {
 
     // Add role_id column to schedules if needed
     try {
-      const [scheduleColumns] = await db.query(
-        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-         WHERE TABLE_NAME='schedules' AND COLUMN_NAME='role_id'`
-      );
-
-      if (scheduleColumns.length === 0) {
+      if (!(await columnExists("schedules", "role_id"))) {
         console.log("⏳ Running migration: Add role_id to schedules...");
         
         await db.query(
@@ -279,12 +250,7 @@ export const runMigrations = async () => {
 
     // Ensure attendance table exists
     try {
-      const [attendanceTable] = await db.query(
-        `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-         WHERE TABLE_NAME='attendance' AND TABLE_SCHEMA=DATABASE()`
-      );
-
-      if (attendanceTable.length === 0) {
+      if (!(await tableExists("attendance"))) {
         console.log("Running migration: Create attendance table...");
 
         await db.query(`
@@ -312,12 +278,7 @@ export const runMigrations = async () => {
 
     // Add avatar_url column to employees if needed
     try {
-      const [employeeColumns] = await db.query(
-        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-         WHERE TABLE_NAME='employees' AND COLUMN_NAME='avatar_url'`
-      );
-
-      if (employeeColumns.length === 0) {
+      if (!(await columnExists("employees", "avatar_url"))) {
         console.log("Running migration: Add avatar_url to employees...");
         await db.query(
           `ALTER TABLE employees ADD COLUMN avatar_url LONGTEXT DEFAULT NULL AFTER phone`
@@ -342,13 +303,7 @@ export const runMigrations = async () => {
       ];
 
       for (const [columnName, columnDefinition] of profileColumns) {
-        const [employeeProfileColumns] = await db.query(
-          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-           WHERE TABLE_NAME='employees' AND COLUMN_NAME=? AND TABLE_SCHEMA=DATABASE()`,
-          [columnName]
-        );
-
-        if (employeeProfileColumns.length === 0) {
+        if (!(await columnExists("employees", columnName))) {
           await db.query(
             `ALTER TABLE employees ADD COLUMN ${columnName} ${columnDefinition}`
           );
@@ -360,12 +315,7 @@ export const runMigrations = async () => {
 
     // Ensure payroll feedback table exists
     try {
-      const [payrollFeedbackTable] = await db.query(
-        `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-         WHERE TABLE_NAME='payroll_feedback' AND TABLE_SCHEMA=DATABASE()`
-      );
-
-      if (payrollFeedbackTable.length === 0) {
+      if (!(await tableExists("payroll_feedback"))) {
         console.log("Running migration: Create payroll_feedback table...");
         await db.query(`
           CREATE TABLE IF NOT EXISTS payroll_feedback (
@@ -390,12 +340,7 @@ export const runMigrations = async () => {
 
     // Ensure shift swap requests table exists
     try {
-      const [shiftSwapTable] = await db.query(
-        `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-         WHERE TABLE_NAME='shift_swap_requests' AND TABLE_SCHEMA=DATABASE()`
-      );
-
-      if (shiftSwapTable.length === 0) {
+      if (!(await tableExists("shift_swap_requests"))) {
         console.log("Running migration: Create shift_swap_requests table...");
         await db.query(`
           CREATE TABLE IF NOT EXISTS shift_swap_requests (

@@ -52,6 +52,13 @@ const toneClasses = {
   emerald: "bg-emerald-50 text-emerald-700",
 };
 
+const dashboardRequests = [
+  { key: "stats", label: "thống kê lịch" },
+  { key: "employees", label: "nhân viên" },
+  { key: "today", label: "chấm công hôm nay" },
+  { key: "attendance", label: "lịch sử chấm công" },
+];
+
 function authHeaders() {
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -597,25 +604,52 @@ export default function Dashboard() {
         attendanceParams.employee_id = selectedEmployee;
       }
 
-      const [statsRes, employeesRes, todayRes, attendanceRes] =
-        await Promise.all([
-          axios.get(`${API_URL}/schedules/stats`, {
-            params: statsParams,
-            headers,
-          }),
-          axios.get(`${API_URL}/employees`, { headers }),
-          axios.get(`${API_URL}/attendance/today`, { headers }),
-          axios.get(`${API_URL}/attendance/history`, {
-            params: attendanceParams,
-            headers,
-          }),
-        ]);
+      const results = await Promise.allSettled([
+        axios.get(`${API_URL}/schedules/stats`, {
+          params: statsParams,
+          headers,
+        }),
+        axios.get(`${API_URL}/employees`, { headers }),
+        axios.get(`${API_URL}/attendance/today`, { headers }),
+        axios.get(`${API_URL}/attendance/history`, {
+          params: attendanceParams,
+          headers,
+        }),
+      ]);
 
-      const employeeList = employeesRes.data || [];
-      setStats(statsRes.data?.stats || []);
+      const failedRequests = results
+        .map((result, index) =>
+          result.status === "rejected"
+            ? {
+                ...dashboardRequests[index],
+                message:
+                  result.reason?.response?.data?.message ||
+                  result.reason?.response?.data?.error ||
+                  result.reason?.message,
+              }
+            : null,
+        )
+        .filter(Boolean);
+
+      if (failedRequests.length) {
+        setError(
+          `Không thể tải ${failedRequests
+            .map((item) => item.label)
+            .join(", ")}${
+            failedRequests[0].message ? `: ${failedRequests[0].message}` : ""
+          }`,
+        );
+      }
+
+      const [statsRes, employeesRes, todayRes, attendanceRes] = results.map(
+        (result) => (result.status === "fulfilled" ? result.value : null),
+      );
+
+      const employeeList = employeesRes?.data || [];
+      setStats(statsRes?.data?.stats || []);
       setEmployees(employeeList);
-      setTodayAttendance(todayRes.data || []);
-      setAttendanceRecords(attendanceRes.data?.records || []);
+      setTodayAttendance(todayRes?.data || []);
+      setAttendanceRecords(attendanceRes?.data?.records || []);
 
       const roleResults = await Promise.allSettled(
         employeeList.map((employee) =>

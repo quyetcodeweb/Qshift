@@ -142,6 +142,17 @@ export default function Sidebar() {
           </Link>
 
           {role === "ADMIN" && (
+            <Link to="/statistics" className="block no-underline">
+              <ListItem className={`${baseItem} ${hoverItem} ${isActive("/statistics") ? activeItem : ""}`}>
+                <ListItemPrefix className="min-w-[24px]">
+                  <PresentationChartBarIcon className="h-5 w-5" />
+                </ListItemPrefix>
+                Thống kê vận hành
+              </ListItem>
+            </Link>
+          )}
+
+          {role === "ADMIN" && (
             <Link to="/employeePage" className="block no-underline">
               <ListItem
                 className={`${baseItem} ${hoverItem} ${

@@ -52,7 +52,17 @@ export const createEmployee = async (data) => {
 
 export const getEmployees = async () => {
   const [rows] = await db.query(`
-    SELECT e.*, u.username 
+    SELECT
+      e.employee_id,
+      e.user_id,
+      e.name,
+      e.email,
+      e.phone,
+      e.hourly_rate,
+      e.hire_date,
+      e.status,
+      FALSE AS has_avatar,
+      u.username
     FROM employees e
     JOIN users u ON e.user_id = u.user_id
     ORDER BY e.name ASC
@@ -76,7 +86,22 @@ export const getEmployeeByUserId = async (userId) => {
 export const getEmployeeById = async (employeeId) => {
   const [rows] = await db.query(
     `
-      SELECT e.*, u.username
+      SELECT
+        e.employee_id,
+        e.user_id,
+        e.name,
+        e.email,
+        e.phone,
+        e.address,
+        e.birth_date,
+        e.gender,
+        e.emergency_contact,
+        e.emergency_phone,
+        e.hourly_rate,
+        e.hire_date,
+        e.status,
+        FALSE AS has_avatar,
+        u.username
       FROM employees e
       JOIN users u ON e.user_id = u.user_id
       WHERE e.employee_id = ?

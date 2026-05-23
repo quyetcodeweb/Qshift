@@ -7,6 +7,7 @@ import {
   CalendarDaysIcon,
   CheckCircleIcon,
   ClockIcon,
+  FunnelIcon,
   InboxIcon,
   PaperAirplaneIcon,
   TrashIcon,
@@ -87,6 +88,22 @@ function notificationTone(type) {
   };
 }
 
+function notificationCategoryKey(type) {
+  if (type?.includes("SHIFT_SWAP")) return "SHIFT_SWAP";
+  if (type?.includes("ATTENDANCE")) return "ATTENDANCE";
+  if (type?.includes("PAYROLL")) return "PAYROLL";
+  if (type?.includes("AVAILABILITY")) return "AVAILABILITY";
+  return "GENERAL";
+}
+
+const notificationFilterTypes = [
+  "SHIFT_SWAP",
+  "ATTENDANCE",
+  "PAYROLL",
+  "AVAILABILITY",
+  "GENERAL",
+];
+
 function requestStatusLabel(status) {
   const map = {
     APPROVED: ["Đã chấp nhận", "bg-emerald-50 text-emerald-700 ring-emerald-100"],
@@ -136,8 +153,10 @@ export default function NotificationPage() {
   const [swapReasonById, setSwapReasonById] = useState({});
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [visibleCount, setVisibleCount] = useState(notificationBatchSize);
   const loadMoreRef = useRef(null);
+  const dragSelectRef = useRef({ active: false, shouldSelect: true });
   const role = getRole();
   const navigate = useNavigate();
 
@@ -145,15 +164,39 @@ export default function NotificationPage() {
     () => data.filter((item) => !item.is_read).length,
     [data],
   );
+  const notificationTypeOptions = useMemo(() => {
+    const counts = data.reduce((acc, item) => {
+      const key = notificationCategoryKey(item.type);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return notificationFilterTypes.map((key) => ({
+      key,
+      count: counts[key] || 0,
+      label: notificationTone(key).label,
+    }));
+  }, [data]);
+  const filteredNotifications = useMemo(
+    () =>
+      typeFilter === "ALL"
+        ? data
+        : data.filter((item) => notificationCategoryKey(item.type) === typeFilter),
+    [data, typeFilter],
+  );
   const visibleNotifications = useMemo(
-    () => data.slice(0, visibleCount),
-    [data, visibleCount],
+    () => filteredNotifications.slice(0, visibleCount),
+    [filteredNotifications, visibleCount],
   );
   const visibleIds = useMemo(
     () => visibleNotifications.map((item) => item.notification_id),
     [visibleNotifications],
   );
-  const hasMoreNotifications = visibleCount < data.length;
+  const filteredIds = useMemo(
+    () => filteredNotifications.map((item) => item.notification_id),
+    [filteredNotifications],
+  );
+  const hasMoreNotifications = visibleCount < filteredNotifications.length;
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
@@ -220,6 +263,32 @@ export default function NotificationPage() {
     );
   };
 
+  const setSelectedState = (id, shouldSelect) => {
+    setSelectedIds((prev) => {
+      const isSelected = prev.includes(id);
+      if (shouldSelect && !isSelected) return [...prev, id];
+      if (!shouldSelect && isSelected) {
+        return prev.filter((item) => item !== id);
+      }
+      return prev;
+    });
+  };
+
+  const startDragSelect = (event, id) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const shouldSelect = !selectedIds.includes(id);
+    dragSelectRef.current = { active: true, shouldSelect };
+    setSelectedState(id, shouldSelect);
+  };
+
+  const dragOverSelect = (id) => {
+    if (!dragSelectRef.current.active) return;
+    setSelectedState(id, dragSelectRef.current.shouldSelect);
+  };
+
   const toggleSelectAll = () => {
     setSelectedIds((prev) =>
       allVisibleSelected
@@ -248,7 +317,44 @@ export default function NotificationPage() {
       refreshNotificationCount();
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Không thể xóa thông báo");
+      alert(
+        err.response?.data?.detail ||
+          err.response?.data?.message ||
+          "Không thể xóa thông báo",
+      );
+    }
+  };
+
+  const deleteFiltered = async () => {
+    if (!filteredIds.length) return;
+    const filterLabel =
+      typeFilter === "ALL"
+        ? "tất cả thông báo"
+        : `tất cả thông báo loại ${notificationTone(typeFilter).label}`;
+    if (!window.confirm(`Xóa ${filteredIds.length} ${filterLabel}?`)) return;
+
+    try {
+      const userId = getUserId();
+      if (!userId) return;
+
+      await axios.delete(`${API_URL}/notifications`, {
+        headers: { "user-id": userId },
+        data: { ids: filteredIds },
+      });
+
+      setData((prev) =>
+        prev.filter((item) => !filteredIds.includes(item.notification_id)),
+      );
+      setSelectedIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
+      setVisibleCount(notificationBatchSize);
+      refreshNotificationCount();
+    } catch (err) {
+      console.error(err);
+      alert(
+        err.response?.data?.detail ||
+          err.response?.data?.message ||
+          "Không thể xóa thông báo",
+      );
     }
   };
 
@@ -394,6 +500,19 @@ export default function NotificationPage() {
   }, []);
 
   useEffect(() => {
+    setVisibleCount(notificationBatchSize);
+  }, [typeFilter]);
+
+  useEffect(() => {
+    const stopDragSelect = () => {
+      dragSelectRef.current = { active: false, shouldSelect: true };
+    };
+
+    window.addEventListener("mouseup", stopDragSelect);
+    return () => window.removeEventListener("mouseup", stopDragSelect);
+  }, []);
+
+  useEffect(() => {
     const node = loadMoreRef.current;
     if (!node || !hasMoreNotifications) return undefined;
 
@@ -401,7 +520,7 @@ export default function NotificationPage() {
       (entries) => {
         if (entries[0]?.isIntersecting) {
           setVisibleCount((count) =>
-            Math.min(count + notificationBatchSize, data.length),
+            Math.min(count + notificationBatchSize, filteredNotifications.length),
           );
         }
       },
@@ -410,7 +529,7 @@ export default function NotificationPage() {
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [data.length, hasMoreNotifications]);
+  }, [filteredNotifications.length, hasMoreNotifications]);
 
   return (
     <div className="mx-auto max-w-[1180px] space-y-5">
@@ -433,22 +552,41 @@ export default function NotificationPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="sticky top-3 z-30 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-            <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                onChange={toggleSelectAll}
-                className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-              />
-              Chọn tất cả đã tải
-              {selectedIds.length > 0 && (
-                <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-black text-cyan-700">
-                  {selectedIds.length} đã chọn
-                </span>
-              )}
-            </label>
-            <div className="flex flex-wrap gap-2">
+          <div className="sticky top-3 z-30 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  Chọn tất cả đã tải
+                </label>
+                {selectedIds.length > 0 && (
+                  <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700">
+                    {selectedIds.length} đã chọn
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
+                  <FunnelIcon className="h-5 w-5 text-slate-500" />
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="min-w-36 bg-transparent text-sm font-bold outline-none"
+                    aria-label="Lọc loại thông báo"
+                  >
+                    <option value="ALL">Tất cả loại ({data.length})</option>
+                    {notificationTypeOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label} ({option.count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
               <button
                 type="button"
                 onClick={fetchData}
@@ -457,6 +595,15 @@ export default function NotificationPage() {
               >
                 <ArrowPathIcon className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
                 Làm mới
+              </button>
+              <button
+                type="button"
+                onClick={deleteFiltered}
+                disabled={filteredIds.length === 0}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-100 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <TrashIcon className="h-5 w-5" />
+                Xóa tất cả
               </button>
               {unreadCount > 0 && (
                 <button
@@ -478,9 +625,17 @@ export default function NotificationPage() {
                   Xóa đã chọn
                 </button>
               )}
+              </div>
             </div>
           </div>
-          {visibleNotifications.map((n) => {
+          {filteredNotifications.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm">
+              <InboxIcon className="mx-auto h-9 w-9 text-slate-300" />
+              <div className="mt-3 text-sm font-black text-slate-800">
+                Không có thông báo thuộc loại này
+              </div>
+            </div>
+          ) : visibleNotifications.map((n) => {
             const tone = notificationTone(n.type);
             const ToneIcon = tone.icon;
             const showAvailabilityButtons =
@@ -508,6 +663,8 @@ export default function NotificationPage() {
                 <label
                   className="absolute left-4 top-4 z-10 inline-flex cursor-pointer rounded-lg bg-white/90 p-1 shadow-sm ring-1 ring-slate-200"
                   onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => startDragSelect(e, n.notification_id)}
+                  onMouseEnter={() => dragOverSelect(n.notification_id)}
                 >
                   <input
                     type="checkbox"
