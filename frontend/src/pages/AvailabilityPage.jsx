@@ -287,6 +287,8 @@ export default function AvailabilityPage() {
         `${API_URL}/availability`,
         {
           employee_id: Number(employeeId),
+          month,
+          year,
           availability,
         },
         { headers: authHeaders() },

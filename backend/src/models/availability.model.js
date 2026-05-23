@@ -1,20 +1,30 @@
 import db from "../config/db.js";
 
 // ================= AVAILABILITY =================
-export const save = async ({ employee_id, availability }) => {
+export const save = async ({ employee_id, availability, month, year }) => {
   const conn = await db.getConnection();
 
   try {
     await conn.beginTransaction();
 
-    const dates = availability.map((a) => a.date);
-
-    if (dates.length > 0) {
+    if (month && year) {
       await conn.query(
         `DELETE FROM employee_availability 
-         WHERE employee_id=? AND work_date IN (?)`,
-        [employee_id, dates]
+         WHERE employee_id=?
+         AND MONTH(work_date)=?
+         AND YEAR(work_date)=?`,
+        [employee_id, month, year]
       );
+    } else {
+      const dates = availability.map((a) => a.date);
+
+      if (dates.length > 0) {
+        await conn.query(
+          `DELETE FROM employee_availability 
+           WHERE employee_id=? AND work_date IN (?)`,
+          [employee_id, dates]
+        );
+      }
     }
 
     for (const item of availability) {
@@ -37,7 +47,13 @@ export const save = async ({ employee_id, availability }) => {
 
 export const get = async (employee_id, month, year) => {
   const [rows] = await db.query(
-    `SELECT * FROM employee_availability
+    `SELECT
+       availability_id,
+       employee_id,
+       shift_id,
+       DATE_FORMAT(work_date, '%Y-%m-%d') as date,
+       DATE_FORMAT(work_date, '%Y-%m-%d') as work_date
+     FROM employee_availability
      WHERE employee_id=? 
      AND MONTH(work_date)=? 
      AND YEAR(work_date)=?`,

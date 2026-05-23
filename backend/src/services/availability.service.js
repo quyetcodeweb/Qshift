@@ -22,6 +22,8 @@ export const requestAvailability = async (user_id, month, year, data) => {
   await model.save({
     employee_id: employee.employee_id,
     availability: data,
+    month,
+    year,
   });
 
   const requestId = await model.createRequest(user_id, month, year, data);
@@ -87,6 +89,8 @@ export const approveRequest = async (id) => {
   await model.save({
     employee_id: empId,
     availability,
+    month: r.month,
+    year: r.year,
   });
 
   await model.updateRequestStatus(id, "APPROVED");
