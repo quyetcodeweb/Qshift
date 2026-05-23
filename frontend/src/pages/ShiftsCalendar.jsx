@@ -263,7 +263,7 @@ function ScheduleTag({
   );
 }
 
-function EmployeeSwapTab() {
+function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
   const [options, setOptions] = useState({
     current_employee_id: null,
     employees: [],
@@ -279,6 +279,7 @@ function EmployeeSwapTab() {
     requester_note: "",
   });
   const [loading, setLoading] = useState(false);
+  const hasInitialTarget = Boolean(initialTarget?.schedule_id);
 
   const fetchSwapData = useCallback(async () => {
     const [optionsRes, requestsRes] = await Promise.all([
@@ -300,6 +301,23 @@ function EmployeeSwapTab() {
     });
   }, [fetchSwapData]);
 
+  useEffect(() => {
+    if (!initialTarget?.schedule_id) return;
+
+    const target =
+      options.schedules.find(
+        (schedule) =>
+          Number(schedule.schedule_id) === Number(initialTarget.schedule_id),
+      ) || initialTarget;
+
+    setForm((current) => ({
+      ...current,
+      target_employee_id: String(target.employee_id || ""),
+      target_work_date: target.work_date || "",
+      target_schedule_id: String(target.schedule_id || ""),
+    }));
+  }, [initialTarget, options.schedules]);
+
   const mySchedules = useMemo(() => {
     return options.schedules.filter(
       (schedule) =>
@@ -318,7 +336,7 @@ function EmployeeSwapTab() {
   }, [form.requester_work_date, mySchedules]);
 
   const targetDates = useMemo(() => {
-    return Array.from(
+    const dates = Array.from(
       new Set(
         options.schedules
           .filter(
@@ -327,16 +345,40 @@ function EmployeeSwapTab() {
           )
           .map((schedule) => schedule.work_date),
       ),
-    ).sort();
-  }, [form.target_employee_id, options.schedules]);
+    );
+
+    if (
+      initialTarget?.work_date &&
+      Number(initialTarget.employee_id) === Number(form.target_employee_id) &&
+      !dates.includes(initialTarget.work_date)
+    ) {
+      dates.push(initialTarget.work_date);
+    }
+
+    return dates.sort();
+  }, [form.target_employee_id, initialTarget, options.schedules]);
 
   const targetSchedules = useMemo(() => {
-    return options.schedules.filter(
+    const schedulesForDate = options.schedules.filter(
       (schedule) =>
         schedule.work_date === form.target_work_date &&
         Number(schedule.employee_id) === Number(form.target_employee_id),
     );
-  }, [form.target_employee_id, form.target_work_date, options.schedules]);
+
+    if (
+      initialTarget?.schedule_id &&
+      initialTarget.work_date === form.target_work_date &&
+      Number(initialTarget.employee_id) === Number(form.target_employee_id) &&
+      !schedulesForDate.some(
+        (schedule) =>
+          Number(schedule.schedule_id) === Number(initialTarget.schedule_id),
+      )
+    ) {
+      schedulesForDate.push(initialTarget);
+    }
+
+    return schedulesForDate;
+  }, [form.target_employee_id, form.target_work_date, initialTarget, options.schedules]);
 
   const sentRequests = useMemo(() => {
     return requests.filter(
@@ -371,6 +413,7 @@ function EmployeeSwapTab() {
         target_schedule_id: "",
         requester_note: "",
       });
+      onClearInitialTarget?.();
       fetchSwapData();
       window.dispatchEvent(new Event("notification-count-changed"));
     } catch (err) {
@@ -411,7 +454,7 @@ function EmployeeSwapTab() {
           {
             label: "Nhân viên cần đổi",
             value: form.target_employee_id,
-            disabled: false,
+            disabled: hasInitialTarget,
             options: options.employees.map((employee) => ({
               value: employee.employee_id,
               label: employee.name,
@@ -427,7 +470,7 @@ function EmployeeSwapTab() {
           {
             label: "Ngày ca của người được gửi",
             value: form.target_work_date,
-            disabled: !form.target_employee_id,
+            disabled: hasInitialTarget || !form.target_employee_id,
             options: targetDates.map((date) => ({ value: date, label: date })),
             onChange: (value) =>
               setForm({
@@ -439,7 +482,7 @@ function EmployeeSwapTab() {
           {
             label: "Ca của người được gửi",
             value: form.target_schedule_id,
-            disabled: !form.target_work_date,
+            disabled: hasInitialTarget || !form.target_work_date,
             options: targetSchedules.map((schedule) => ({
               value: schedule.schedule_id,
               label: formatShift(schedule),
@@ -545,6 +588,7 @@ export default function ShiftsCalendar() {
   const [currentEmployeeId, setCurrentEmployeeId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [swapCandidate, setSwapCandidate] = useState(null);
+  const [selectedSwapTarget, setSelectedSwapTarget] = useState(null);
 
   const range = useMemo(() => {
     if (viewMode === "day") {
@@ -734,7 +778,10 @@ export default function ShiftsCalendar() {
       </div>
 
       {activeTab === "swap" && role === "EMPLOYEE" ? (
-        <EmployeeSwapTab />
+        <EmployeeSwapTab
+          initialTarget={selectedSwapTarget}
+          onClearInitialTarget={() => setSelectedSwapTarget(null)}
+        />
       ) : (
         <div className="space-y-4 rounded-md border border-gray-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -808,33 +855,50 @@ export default function ShiftsCalendar() {
                   Không có ca trong ngày này
                 </div>
               ) : (
-                visibleSchedules.map((schedule) => (
-                  <div
-                    key={schedule.schedule_id}
-                    className={`rounded-md border border-gray-200 border-l-4 ${borderClass(schedule, attendanceByScheduleId)} bg-white p-4 shadow-sm`}
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-gray-950 text-white">
-                          <UserIcon className="h-5 w-5" />
+                visibleSchedules.map((schedule) => {
+                  const canRequestSwap =
+                    role === "EMPLOYEE" &&
+                    currentEmployeeId &&
+                    Number(schedule.employee_id) !== Number(currentEmployeeId);
+
+                  return (
+                    <div
+                      key={schedule.schedule_id}
+                      className={`rounded-md border border-gray-200 border-l-4 ${borderClass(schedule, attendanceByScheduleId)} bg-white p-4 shadow-sm`}
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-gray-950 text-white">
+                            <UserIcon className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-bold text-gray-950">{schedule.employee_name}</div>
+                            <div className="mt-1 text-sm font-medium text-gray-500">{schedule.shift_name}</div>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-base font-bold text-gray-950">{schedule.employee_name}</div>
-                          <div className="mt-1 text-sm font-medium text-gray-500">{schedule.shift_name}</div>
+                        <div className="flex flex-wrap gap-2 text-sm font-bold">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-3 py-2 text-gray-700">
+                            <ClockIcon className="h-4 w-4" />
+                            {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
+                          </span>
+                          <span className="rounded-md bg-gray-100 px-3 py-2 text-gray-700">
+                            {borderLabel(schedule, attendanceByScheduleId)}
+                          </span>
+                          {canRequestSwap && (
+                            <button
+                              type="button"
+                              onClick={() => setSwapCandidate(schedule)}
+                              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-white transition hover:bg-blue-700"
+                            >
+                              <ArrowsRightLeftIcon className="h-4 w-4" />
+                              Đổi ca
+                            </button>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-sm font-bold">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-3 py-2 text-gray-700">
-                          <ClockIcon className="h-4 w-4" />
-                          {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
-                        </span>
-                        <span className="rounded-md bg-gray-100 px-3 py-2 text-gray-700">
-                          {borderLabel(schedule, attendanceByScheduleId)}
-                        </span>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           ) : (
@@ -884,6 +948,7 @@ export default function ShiftsCalendar() {
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedSwapTarget(swapCandidate);
                   setSwapCandidate(null);
                   setActiveTab("swap");
                 }}

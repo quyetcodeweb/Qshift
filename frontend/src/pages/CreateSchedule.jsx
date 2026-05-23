@@ -365,17 +365,18 @@ export default function CreateSchedule() {
           headers: authHeaders(),
         });
       }
+      const employee = employees.find(
+        (item) => String(item.employee_id) === String(payload.employee_id),
+      );
+      const shift = shifts.find(
+        (item) => String(item.shift_id) === String(payload.shift_id),
+      );
+
       setScheduleModalOpen(false);
       if (
         selectedSchedule &&
         editingSchedule?.schedule_id === selectedSchedule.schedule_id
       ) {
-        const employee = employees.find(
-          (item) => String(item.employee_id) === String(payload.employee_id),
-        );
-        const shift = shifts.find(
-          (item) => String(item.shift_id) === String(payload.shift_id),
-        );
         setSelectedSchedule({
           ...selectedSchedule,
           ...payload,
@@ -391,6 +392,12 @@ export default function CreateSchedule() {
       setViewYear(year);
       setViewMonth(String(Number(month)));
       fetchSchedules(String(Number(month)), year);
+      window.appPopup?.({
+        type: "success",
+        title: editingSchedule ? "Đã cập nhật ca làm" : "Đã thêm ca làm thủ công",
+        message: `${employee?.name || "Nhân viên"} - ${shift?.shift_name || "Ca làm"} vào ngày ${formatDate(payload.work_date)}.`,
+        duration: 6000,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể lưu ca làm");
     }
