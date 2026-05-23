@@ -4,7 +4,6 @@ import {
   Card,
   Button,
   Typography,
-  Checkbox,
   Alert,
 } from "@material-tailwind/react";
 import axios from "axios";
@@ -16,27 +15,16 @@ export default function PreviewScheduleModal({
   schedule,
   onPublish,
 }) {
-  const [selectedShifts, setSelectedShifts] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   if (!schedule || !schedule.generated_shifts) return null;
 
-  const toggleShift = (idx) => {
-    const updated = new Set(selectedShifts);
-    if (updated.has(idx)) {
-      updated.delete(idx);
-    } else {
-      updated.add(idx);
-    }
-    setSelectedShifts(updated);
-  };
-
   const handleSave = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const shiftsToSave = schedule.generated_shifts.map((shift, idx) => ({
+      const shiftsToSave = schedule.generated_shifts.map((shift) => ({
         ...shift,
         status: "DRAFT",
       }));
@@ -65,7 +53,14 @@ export default function PreviewScheduleModal({
   };
 
   const handlePublish = async () => {
-    if (!confirm("Công bố lịch này cho tất cả nhân viên?")) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Công bố lịch",
+      message: "Công bố lịch này cho tất cả nhân viên?",
+      confirmText: "Công bố",
+      cancelText: "Xem lại",
+      type: "info",
+    });
+    if (!confirmed) return;
 
     console.log(
       "[handlePublish] Publishing",

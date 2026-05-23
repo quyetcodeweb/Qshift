@@ -70,7 +70,14 @@ export default function DraftSchedulesModal({ open, onClose }) {
   };
 
   const handleDeleteDraft = async (draftId) => {
-    if (!window.confirm("Xóa bản nháp này?")) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa bản nháp",
+      message: "Xóa bản nháp này?",
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       const token = localStorage.getItem("token");
@@ -92,7 +99,14 @@ export default function DraftSchedulesModal({ open, onClose }) {
 
   const handlePublishDraft = async () => {
     if (!selectedDraft || !draftDetails?.items?.length) return;
-    if (!window.confirm("Công bố bản nháp này?")) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Công bố bản nháp",
+      message: "Công bố bản nháp này cho nhân viên?",
+      confirmText: "Công bố",
+      cancelText: "Xem lại",
+      type: "info",
+    });
+    if (!confirmed) return;
 
     try {
       setDetailLoading(true);

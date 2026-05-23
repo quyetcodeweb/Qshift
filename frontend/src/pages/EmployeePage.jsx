@@ -387,13 +387,14 @@ export default function EmployeePage() {
   };
 
   const deleteEmployee = async (employee) => {
-    if (
-      !window.confirm(
-        `Xóa nhân viên ${employee.name}? Thao tác này cũng xóa tài khoản và dữ liệu liên quan.`,
-      )
-    ) {
-      return;
-    }
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa nhân viên",
+      message: `Xóa nhân viên ${employee.name}? Thao tác này cũng xóa tài khoản và dữ liệu liên quan.`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       await axios.delete(`${API_URL}/employees/${employee.employee_id}`, {

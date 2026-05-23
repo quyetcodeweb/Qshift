@@ -299,7 +299,14 @@ export default function NotificationPage() {
 
   const deleteSelected = async () => {
     if (!selectedIds.length) return;
-    if (!window.confirm(`Xóa ${selectedIds.length} thông báo đã chọn?`)) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa thông báo",
+      message: `Xóa ${selectedIds.length} thông báo đã chọn?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       const userId = getUserId();
@@ -331,7 +338,14 @@ export default function NotificationPage() {
       typeFilter === "ALL"
         ? "tất cả thông báo"
         : `tất cả thông báo loại ${notificationTone(typeFilter).label}`;
-    if (!window.confirm(`Xóa ${filteredIds.length} ${filterLabel}?`)) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa thông báo",
+      message: `Xóa ${filteredIds.length} ${filterLabel}?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       const userId = getUserId();

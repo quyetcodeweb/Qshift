@@ -130,7 +130,14 @@ export default function EmployeeRolesPage() {
   };
 
   const handleRemoveRole = async (roleId) => {
-    if (!window.confirm("Xóa vai trò này?")) return;
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa vai trò",
+      message: "Xóa vai trò này?",
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       const token = localStorage.getItem("token");

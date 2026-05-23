@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../services/api";
 
 export default function ShiftManagement() {
@@ -12,15 +12,15 @@ export default function ShiftManagement() {
 
   const [editingId, setEditingId] = useState(null);
 
-  // Load data
-  useEffect(() => {
-    fetchShifts();
-  }, []);
-
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     const res = await api.get("/shifts");
     setShifts(res.data);
-  };
+  }, []);
+
+  // Load data
+  useEffect(() => {
+    queueMicrotask(fetchShifts);
+  }, [fetchShifts]);
 
   // Input change
   const handleChange = (e) => {
@@ -61,9 +61,13 @@ export default function ShiftManagement() {
   };
 
   const handleDelete = async (shift) => {
-    const confirmed = window.confirm(
-      `Xóa ca "${shift.shift_name}" (${shift.start_time} - ${shift.end_time})?\n\nDữ liệu liên quan sẽ bị xóa:\n- Yêu cầu ca\n- Tính sẵn có nhân viên\n- Lịch làm việc`,
-    );
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa ca làm",
+      message: `Xóa ca "${shift.shift_name}" (${shift.start_time} - ${shift.end_time})?\n\nDữ liệu liên quan sẽ bị xóa:\n- Yêu cầu ca\n- Tính sẵn có nhân viên\n- Lịch làm việc`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
 
     if (confirmed) {
       await api.delete(`/shifts/${shift.shift_id}`);

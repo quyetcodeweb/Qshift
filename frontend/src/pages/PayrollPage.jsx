@@ -781,9 +781,14 @@ export default function PayrollPage() {
       : "Tất cả thời gian";
 
   const undoResolution = async (detail) => {
-    if (!window.confirm(`Hoàn tác xử lý ca lương của ${detail.employee_name}?`)) {
-      return;
-    }
+    const confirmed = await window.appConfirm?.({
+      title: "Hoàn tác xử lý",
+      message: `Hoàn tác xử lý ca lương của ${detail.employee_name}?`,
+      confirmText: "Hoàn tác",
+      cancelText: "Giữ nguyên",
+      type: "warning",
+    });
+    if (!confirmed) return;
 
     try {
       await axios.delete(`${API_URL}/payroll/resolve/${detail.schedule_id}`, {

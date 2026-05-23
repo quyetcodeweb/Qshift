@@ -397,11 +397,14 @@ export default function CreateSchedule() {
   };
 
   const deleteSchedule = async (schedule) => {
-    if (
-      !window.confirm(
-        `Xóa ca ${schedule.shift_name} của ${schedule.employee_name}?`,
-      )
-    )
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa ca làm",
+      message: `Xóa ca ${schedule.shift_name} của ${schedule.employee_name}?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed)
       return;
     try {
       await axios.delete(`${API_URL}/schedules/${schedule.schedule_id}`, {
@@ -492,11 +495,14 @@ export default function CreateSchedule() {
   };
 
   const deleteShift = async (shift) => {
-    if (
-      !window.confirm(
-        `Xóa ca "${shift.shift_name}"? Lịch làm liên quan cũng sẽ bị xóa.`,
-      )
-    )
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa loại ca",
+      message: `Xóa ca "${shift.shift_name}"? Lịch làm liên quan cũng sẽ bị xóa.`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed)
       return;
     try {
       await axios.delete(`${API_URL}/shifts/${shift.shift_id}`, {
