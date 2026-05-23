@@ -13,6 +13,15 @@ export const updateUser = async (req, res) => {
   }
 };
 
+export const changeOwnPassword = async (req, res) => {
+  try {
+    await userService.changeOwnPassword(req.user.user_id, req.body);
+    res.json({ message: "Password updated" });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
+};
+
 export const deleteUser = async (req, res) => {
   try {
     await userService.deleteUser(req.params.id);

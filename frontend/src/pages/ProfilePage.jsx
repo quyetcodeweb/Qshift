@@ -162,12 +162,14 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({});
   const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
     password: "",
     confirmPassword: "",
   });
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -219,6 +221,25 @@ export default function ProfilePage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const employeePayload = useCallback(
+    (source, overrides = {}) => ({
+      name: String(source?.name || "").trim(),
+      email: String(source?.email || "").trim(),
+      phone: String(source?.phone || "").trim(),
+      avatar_url: source?.avatar_url || null,
+      address: String(source?.address || "").trim(),
+      birth_date: toDateInput(source?.birth_date) || null,
+      gender: source?.gender || null,
+      emergency_contact: String(source?.emergency_contact || "").trim(),
+      emergency_phone: String(source?.emergency_phone || "").trim(),
+      hire_date: toDateInput(profile?.hire_date) || null,
+      status: profile?.status || "Đang làm việc",
+      hourly_rate: profile?.hourly_rate,
+      ...overrides,
+    }),
+    [profile],
+  );
+
   const handleAvatarFile = async (file) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -227,12 +248,40 @@ export default function ProfilePage() {
     }
 
     try {
-      const imageData = await resizeImageFile(file);
-      updateForm("avatar_url", imageData);
-      setEditing(true);
+      if (!profile?.employee_id) return;
+      setSavingAvatar(true);
       setError("");
-    } catch {
-      setError("Không thể đọc ảnh này, vui lòng chọn ảnh khác");
+      setSuccess("");
+      const imageData = await resizeImageFile(file);
+      const res = await axios.put(
+        `${API_URL}/employees/${profile.employee_id}`,
+        employeePayload(profile, { avatar_url: imageData }),
+        { headers: authHeaders() },
+      );
+
+      setProfile(res.data);
+      setForm((prev) => ({ ...prev, avatar_url: res.data?.avatar_url || imageData }));
+      setSuccess("Đã cập nhật ảnh hồ sơ");
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đổi ảnh hồ sơ",
+        message: "Ảnh đại diện mới đã được lưu.",
+      });
+      setSavingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Không thể cập nhật ảnh hồ sơ";
+      setError(message);
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể đổi ảnh",
+        message,
+      });
+      setSavingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -274,6 +323,11 @@ export default function ProfilePage() {
       setProfile(res.data);
       setProfileForm(res.data);
       setEditing(false);
+      window.appPopup?.({
+        type: "success",
+        title: "Đã lưu thông tin",
+        message: "Hồ sơ cá nhân đã được cập nhật.",
+      });
       setSuccess("Đã cập nhật hồ sơ cá nhân");
     } catch (err) {
       setError(
@@ -287,6 +341,10 @@ export default function ProfilePage() {
   };
 
   const changePassword = async () => {
+    if (!passwordForm.currentPassword) {
+      setError("Vui lòng nhập mật khẩu cũ");
+      return;
+    }
     if (!passwordForm.password || passwordForm.password.length < 6) {
       setError("Mật khẩu mới cần ít nhất 6 ký tự");
       return;
@@ -301,16 +359,14 @@ export default function ProfilePage() {
       setError("");
       setSuccess("");
       await axios.put(
-        `${API_URL}/users/${profile.user_id}`,
+        `${API_URL}/users/me/password`,
         {
-          username: profile.username || account.username,
-          password: passwordForm.password,
-          role: account.role || "EMPLOYEE",
-          status: account.status ?? true,
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.password,
         },
         { headers: authHeaders() },
       );
-      setPasswordForm({ password: "", confirmPassword: "" });
+      setPasswordForm({ currentPassword: "", password: "", confirmPassword: "" });
       setSuccess("Đã đổi mật khẩu tài khoản");
     } catch (err) {
       setError(
@@ -351,10 +407,16 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-lg ring-1 ring-slate-200 transition hover:scale-105 hover:bg-cyan-50"
+                  disabled={savingAvatar}
+                  className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-2xl text-slate-950 shadow-lg ring-1 ring-white/70 transition hover:scale-105 hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+                  style={{ backgroundColor: "#67e8f9" }}
                   aria-label="Chọn ảnh hồ sơ"
                 >
-                  <CameraIcon className="h-5 w-5" />
+                  {savingAvatar ? (
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <CameraIcon className="h-5 w-5" />
+                  )}
                 </button>
                 <input
                   ref={fileInputRef}
@@ -399,7 +461,12 @@ export default function ProfilePage() {
                     type="button"
                     onClick={cancelEdit}
                     disabled={saving}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-slate-900 transition hover:bg-slate-100 disabled:opacity-60"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold transition hover:brightness-95 disabled:opacity-60"
+                    style={{
+                      backgroundColor: "#ffffff",
+                      borderColor: "#cbd5e1",
+                      color: "#0f172a",
+                    }}
                   >
                     <XMarkIcon className="h-5 w-5" />
                     Hủy
@@ -408,7 +475,8 @@ export default function ProfilePage() {
                     type="button"
                     onClick={saveProfile}
                     disabled={saving}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black text-slate-950 transition hover:brightness-105 disabled:opacity-60"
+                    style={{ backgroundColor: "#67e8f9" }}
                   >
                     <CheckCircleIcon className="h-5 w-5" />
                     {saving ? "Đang lưu" : "Lưu hồ sơ"}
@@ -418,7 +486,8 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-slate-900 transition hover:bg-cyan-50"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white shadow-lg shadow-cyan-950/20 transition hover:brightness-105"
+                  style={{ backgroundColor: "#0891b2" }}
                 >
                   <PencilSquareIcon className="h-5 w-5" />
                   Sửa thông tin
@@ -581,9 +650,15 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
+              <div
+                className="rounded-2xl border p-5 text-white shadow-sm"
+                style={{ backgroundColor: "#0f172a", borderColor: "#334155" }}
+              >
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400 text-slate-950">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-950"
+                    style={{ backgroundColor: "#67e8f9" }}
+                  >
                     <LockClosedIcon className="h-5 w-5" />
                   </div>
                   <div>
@@ -594,6 +669,31 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div className="space-y-3">
+                  <label className="block">
+                    <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300">
+                      <KeyIcon className="h-4 w-4" />
+                      Mật khẩu cũ
+                    </span>
+                    <input
+                      type="password"
+                      name="profile_old_password_no_autofill"
+                      value={passwordForm.currentPassword}
+                      onChange={(event) =>
+                        setPasswordForm((prev) => ({
+                          ...prev,
+                          currentPassword: event.target.value,
+                        }))
+                      }
+                      autoComplete="new-password"
+                      className="h-11 w-full rounded-lg border px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-400 focus:ring-4"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        borderColor: "rgba(255,255,255,0.16)",
+                        "--tw-ring-color": "rgba(103,232,249,0.22)",
+                      }}
+                      placeholder="Nhập mật khẩu hiện tại"
+                    />
+                  </label>
                   <label className="block">
                     <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300">
                       <KeyIcon className="h-4 w-4" />
@@ -608,7 +708,13 @@ export default function ProfilePage() {
                           password: event.target.value,
                         }))
                       }
-                      className="h-11 w-full rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/20"
+                      autoComplete="new-password"
+                      className="h-11 w-full rounded-lg border px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-400 focus:ring-4"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        borderColor: "rgba(255,255,255,0.16)",
+                        "--tw-ring-color": "rgba(103,232,249,0.22)",
+                      }}
                       placeholder="Tối thiểu 6 ký tự"
                     />
                   </label>
@@ -626,7 +732,13 @@ export default function ProfilePage() {
                           confirmPassword: event.target.value,
                         }))
                       }
-                      className="h-11 w-full rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/20"
+                      autoComplete="new-password"
+                      className="h-11 w-full rounded-lg border px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-400 focus:ring-4"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        borderColor: "rgba(255,255,255,0.16)",
+                        "--tw-ring-color": "rgba(103,232,249,0.22)",
+                      }}
                       placeholder="Nhập lại mật khẩu"
                     />
                   </label>
@@ -634,7 +746,8 @@ export default function ProfilePage() {
                     type="button"
                     onClick={changePassword}
                     disabled={savingPassword}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-black text-slate-950 transition hover:brightness-105 disabled:opacity-60"
+                    style={{ backgroundColor: "#67e8f9" }}
                   >
                     <LockClosedIcon className="h-5 w-5" />
                     {savingPassword ? "Đang đổi" : "Đổi mật khẩu"}

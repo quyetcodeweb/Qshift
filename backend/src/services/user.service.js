@@ -48,6 +48,48 @@ export const updateUser = async (id, data) => {
   });
 };
 
+export const changeOwnPassword = async (userId, data) => {
+  const existingUser = await userModel.getUserById(userId);
+
+  if (!existingUser) {
+    const error = new Error("Không tìm thấy tài khoản");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!data.currentPassword || !data.newPassword) {
+    const error = new Error("Vui lòng nhập mật khẩu cũ và mật khẩu mới");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isCurrentPasswordValid = await bcrypt.compare(
+    data.currentPassword,
+    existingUser.password || "",
+  );
+
+  if (!isCurrentPasswordValid) {
+    const error = new Error("Mật khẩu cũ không đúng");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (String(data.newPassword).length < 6) {
+    const error = new Error("Mật khẩu mới cần ít nhất 6 ký tự");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const password = await bcrypt.hash(data.newPassword, 10);
+
+  return await userModel.updateUser(userId, {
+    username: existingUser.username,
+    password,
+    role: existingUser.role,
+    status: existingUser.status,
+  });
+};
+
 export const deleteUser = async (id) => {
   const user = await userModel.getUserById(id);
 
