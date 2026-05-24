@@ -1,6 +1,8 @@
 import express from "express";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import {
+  createPayrollAdjustment,
+  getPayrollAdjustments,
   getPayrollSettings,
   getPayrollSummary,
   respondPayrollFeedback,
@@ -13,6 +15,8 @@ import {
 const router = express.Router();
 
 router.get("/summary", verifyToken, getPayrollSummary);
+router.get("/adjustments", verifyToken, getPayrollAdjustments);
+router.post("/adjustments", verifyToken, createPayrollAdjustment);
 router.get("/settings", verifyToken, getPayrollSettings);
 router.put("/settings", verifyToken, updatePayrollSettings);
 router.post("/resolve/:scheduleId", verifyToken, resolvePayrollSchedule);

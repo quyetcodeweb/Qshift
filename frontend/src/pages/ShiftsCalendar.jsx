@@ -7,6 +7,7 @@ import {
   ArrowsRightLeftIcon,
   CalendarDaysIcon,
   ClockIcon,
+  PaperAirplaneIcon,
   UserIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -28,6 +29,21 @@ const shiftPalette = [
   { background: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
   { background: "#ecfeff", text: "#155e75", dot: "#06b6d4" },
   { background: "#fff1f2", text: "#9f1239", dot: "#f43f5e" },
+];
+
+const notePalette = [
+  "#2563eb",
+  "#0891b2",
+  "#059669",
+  "#16a34a",
+  "#ca8a04",
+  "#f97316",
+  "#dc2626",
+  "#e11d48",
+  "#7c3aed",
+  "#4f46e5",
+  "#475569",
+  "#0f766e",
 ];
 
 const namedShiftColors = {
@@ -148,6 +164,28 @@ function shiftTone(schedule) {
   return shiftPalette[index];
 }
 
+function toneFromHex(value, fallback = "#2563eb") {
+  const color = normalizeColor(value) || fallback;
+  const rgb = hexToRgb(color);
+  if (!rgb) {
+    return { background: "#eff6ff", text: fallback, dot: fallback };
+  }
+  return {
+    background: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.12)`,
+    text: color,
+    dot: color,
+  };
+}
+
+function formatMoneyCompact(value) {
+  const number = Number(value || 0);
+  if (!number) return "";
+  const abs = Math.abs(number);
+  if (abs >= 1000000) return `${number > 0 ? "+" : "-"}${Math.round(abs / 100000) / 10}tr`;
+  if (abs >= 1000) return `${number > 0 ? "+" : "-"}${Math.round(abs / 1000)}k`;
+  return `${number > 0 ? "+" : "-"}${abs.toLocaleString("vi-VN")}đ`;
+}
+
 function borderClass(schedule, attendanceByScheduleId) {
   const now = new Date();
   if (now < scheduleStart(schedule)) return "border-gray-300";
@@ -212,6 +250,7 @@ function ScheduleTag({
   role,
   currentEmployeeId,
   attendanceByScheduleId,
+  adjustmentsByEmployeeDate = new Map(),
   onSelectSwap,
 }) {
   const tone = shiftTone(schedule);
@@ -226,6 +265,8 @@ function ScheduleTag({
       : viewMode === "week"
         ? `${schedule.employee_name} · ${schedule.shift_name}`
         : `${schedule.employee_name} · ${schedule.shift_name} · ${formatTime(schedule.start_time)}-${formatTime(schedule.end_time)}`;
+  const adjustment =
+    adjustmentsByEmployeeDate.get(`${schedule.employee_id}-${schedule.work_date}`) || 0;
 
   return (
     <button
@@ -244,6 +285,11 @@ function ScheduleTag({
           style={{ backgroundColor: tone.dot }}
         />
         <span className="min-w-0 truncate">{label}</span>
+        {adjustment !== 0 && (
+          <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${adjustment > 0 ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
+            {formatMoneyCompact(adjustment)}
+          </span>
+        )}
       </span>
 
       {role === "ADMIN" && (
@@ -257,8 +303,36 @@ function ScheduleTag({
           <span className="mt-1 block text-gray-500">
             {borderLabel(schedule, attendanceByScheduleId)}
           </span>
+          {adjustment !== 0 && (
+            <span className={`mt-2 block font-bold ${adjustment > 0 ? "text-emerald-700" : "text-red-700"}`}>
+              Thưởng/phạt: {formatMoneyCompact(adjustment)}
+            </span>
+          )}
         </span>
       )}
+    </button>
+  );
+}
+
+function NoteTag({ note }) {
+  const tone = toneFromHex(note.color);
+
+  return (
+    <button
+      type="button"
+      title={note.title}
+      className="group relative z-0 w-full rounded-md px-2 py-1.5 text-left text-[11px] font-black shadow-sm transition hover:z-[1000] hover:-translate-y-0.5 hover:shadow-md focus:z-[1000]"
+      style={{ backgroundColor: tone.background, color: tone.text }}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />
+        <span className="min-w-0 truncate">{note.title}</span>
+      </span>
+      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-gray-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block group-focus:block">
+        <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-gray-200 bg-white" />
+        <span className="block font-bold text-gray-950">Thông báo</span>
+        <span className="mt-1 block">{note.title}</span>
+      </span>
     </button>
   );
 }
@@ -582,6 +656,8 @@ export default function ShiftsCalendar() {
   const role = getRole();
   const [schedules, setSchedules] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
   const [activeTab, setActiveTab] = useState("calendar");
   const [viewMode, setViewMode] = useState("month");
   const [cursorDate, setCursorDate] = useState(new Date());
@@ -589,6 +665,13 @@ export default function ShiftsCalendar() {
   const [loading, setLoading] = useState(false);
   const [swapCandidate, setSwapCandidate] = useState(null);
   const [selectedSwapTarget, setSelectedSwapTarget] = useState(null);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteForm, setNoteForm] = useState({
+    title: "",
+    dates: [],
+    draftDate: "",
+    color: notePalette[0],
+  });
 
   const range = useMemo(() => {
     if (viewMode === "day") {
@@ -610,11 +693,19 @@ export default function ShiftsCalendar() {
       setLoading(true);
       const month = cursorDate.getMonth() + 1;
       const year = cursorDate.getFullYear();
-      const [scheduleRes, attendanceRes] = await Promise.allSettled([
+      const [scheduleRes, attendanceRes, notesRes, adjustmentsRes] = await Promise.allSettled([
         axios.get(`${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`, {
           headers: authHeaders(),
         }),
         axios.get(`${API_URL}/attendance/history`, {
+          params: range,
+          headers: authHeaders(),
+        }),
+        axios.get(`${API_URL}/schedules/notes`, {
+          params: range,
+          headers: authHeaders(),
+        }),
+        axios.get(`${API_URL}/payroll/adjustments`, {
           params: range,
           headers: authHeaders(),
         }),
@@ -626,10 +717,14 @@ export default function ShiftsCalendar() {
           ? attendanceRes.value.data?.records || []
           : [],
       );
+      setNotes(notesRes.status === "fulfilled" ? notesRes.value.data || [] : []);
+      setAdjustments(adjustmentsRes.status === "fulfilled" ? adjustmentsRes.value.data || [] : []);
     } catch (err) {
       console.error("[ShiftsCalendar] Load error:", err);
       setSchedules([]);
       setAttendanceRecords([]);
+      setNotes([]);
+      setAdjustments([]);
     } finally {
       setLoading(false);
     }
@@ -649,6 +744,22 @@ export default function ShiftsCalendar() {
   }, [role]);
 
   const schedulesByDate = useMemo(() => groupSchedulesByDate(schedules), [schedules]);
+  const notesByDate = useMemo(() => {
+    return notes.reduce((map, note) => {
+      const current = map.get(note.work_date) || [];
+      current.push(note);
+      map.set(note.work_date, current);
+      return map;
+    }, new Map());
+  }, [notes]);
+  const adjustmentsByEmployeeDate = useMemo(() => {
+    return adjustments.reduce((map, item) => {
+      const key = `${item.employee_id}-${item.work_date}`;
+      const signed = item.type === "PENALTY" ? -Number(item.amount || 0) : Number(item.amount || 0);
+      map.set(key, (map.get(key) || 0) + signed);
+      return map;
+    }, new Map());
+  }, [adjustments]);
   const attendanceByScheduleId = useMemo(() => {
     return new Map(
       attendanceRecords.map((record) => [Number(record.schedule_id), record]),
@@ -686,9 +797,38 @@ export default function ShiftsCalendar() {
     setCursorDate((current) => addDays(current, direction));
   };
 
+  const addNoteDate = () => {
+    if (!noteForm.draftDate || noteForm.dates.includes(noteForm.draftDate)) return;
+    setNoteForm((current) => ({
+      ...current,
+      dates: [...current.dates, current.draftDate].sort(),
+      draftDate: "",
+    }));
+  };
+
+  const submitScheduleNote = async (event) => {
+    event.preventDefault();
+    const dates = [...new Set([...noteForm.dates, noteForm.draftDate].filter(Boolean))].sort();
+    try {
+      await axios.post(
+        `${API_URL}/schedules/notes`,
+        { title: noteForm.title, dates, color: noteForm.color },
+        { headers: authHeaders() },
+      );
+      setNoteModalOpen(false);
+      setNoteForm({ title: "", dates: [], draftDate: "", color: notePalette[0] });
+      window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({ type: "success", title: "Đã gửi thông báo", message: `Đã gắn tag cho ${dates.length} ngày.` });
+      fetchSchedules();
+    } catch (err) {
+      window.appPopup?.({ type: "error", title: "Không thể gửi thông báo", message: err.response?.data?.message || "Vui lòng thử lại." });
+    }
+  };
+
   const renderDayCell = (date) => {
     const key = dateKey(date);
     const items = schedulesByDate.get(key) || [];
+    const dayNotes = notesByDate.get(key) || [];
     const isCurrentMonth = date.getMonth() === cursorDate.getMonth();
     const isToday = key === dateKey(new Date());
 
@@ -715,7 +855,10 @@ export default function ShiftsCalendar() {
         </div>
 
         <div className="space-y-1.5">
-          {items.length === 0 ? (
+          {dayNotes.map((note) => (
+            <NoteTag key={note.note_id} note={note} />
+          ))}
+          {items.length === 0 && dayNotes.length === 0 ? (
             <div className="rounded-md border border-dashed border-gray-200 py-3 text-center text-[11px] font-semibold text-gray-400">
               Trống
             </div>
@@ -728,6 +871,7 @@ export default function ShiftsCalendar() {
                 role={role}
                 currentEmployeeId={currentEmployeeId}
                 attendanceByScheduleId={attendanceByScheduleId}
+                adjustmentsByEmployeeDate={adjustmentsByEmployeeDate}
                 onSelectSwap={setSwapCandidate}
               />
             ))
@@ -751,6 +895,16 @@ export default function ShiftsCalendar() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {role === "ADMIN" && (
+              <button
+                type="button"
+                onClick={() => setNoteModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                <PaperAirplaneIcon className="h-5 w-5" />
+                Gửi thông báo
+              </button>
+            )}
             {role === "EMPLOYEE" && (
               <div className="flex rounded-md border border-gray-200 bg-gray-50 p-1">
                 <button
@@ -850,7 +1004,10 @@ export default function ShiftsCalendar() {
 
           {viewMode === "day" ? (
             <div className="grid gap-3">
-              {visibleSchedules.length === 0 ? (
+              {(notesByDate.get(dateKey(cursorDate)) || []).map((note) => (
+                <NoteTag key={note.note_id} note={note} />
+              ))}
+              {visibleSchedules.length === 0 && !(notesByDate.get(dateKey(cursorDate)) || []).length ? (
                 <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-10 text-center text-sm font-semibold text-gray-500">
                   Không có ca trong ngày này
                 </div>
@@ -860,6 +1017,8 @@ export default function ShiftsCalendar() {
                     role === "EMPLOYEE" &&
                     currentEmployeeId &&
                     Number(schedule.employee_id) !== Number(currentEmployeeId);
+                  const adjustment =
+                    adjustmentsByEmployeeDate.get(`${schedule.employee_id}-${schedule.work_date}`) || 0;
 
                   return (
                     <div
@@ -884,6 +1043,11 @@ export default function ShiftsCalendar() {
                           <span className="rounded-md bg-gray-100 px-3 py-2 text-gray-700">
                             {borderLabel(schedule, attendanceByScheduleId)}
                           </span>
+                          {adjustment !== 0 && (
+                            <span className={`rounded-md px-3 py-2 ${adjustment > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                              {formatMoneyCompact(adjustment)}
+                            </span>
+                          )}
                           {canRequestSwap && (
                             <button
                               type="button"
@@ -915,6 +1079,100 @@ export default function ShiftsCalendar() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {noteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/30 p-3 backdrop-blur-sm sm:items-center">
+          <form onSubmit={submitScheduleNote} className="w-full max-w-lg rounded-md bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-950">Gửi thông báo lịch</h2>
+                <p className="mt-1 text-sm text-gray-600">Tag sẽ hiển thị trên các ngày đã chọn trong lịch chung.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNoteModalOpen(false)}
+                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-950"
+                aria-label="Đóng"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="mt-4 block text-sm font-semibold text-gray-700">
+              Nội dung
+              <input
+                value={noteForm.title}
+                onChange={(event) => setNoteForm((current) => ({ ...current, title: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-blue-600"
+                required
+              />
+            </label>
+
+            <div className="mt-3">
+              <label className="block text-sm font-semibold text-gray-700">
+                Chọn ngày
+                <div className="mt-1 flex gap-2">
+                  <input
+                    type="date"
+                    value={noteForm.draftDate}
+                    onChange={(event) => setNoteForm((current) => ({ ...current, draftDate: event.target.value }))}
+                    className="h-10 min-w-0 flex-1 rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-blue-600"
+                  />
+                  <button type="button" onClick={addNoteDate} className="rounded-md bg-gray-950 px-3 text-sm font-bold text-white">
+                    Thêm
+                  </button>
+                </div>
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {noteForm.dates.map((date) => (
+                  <button
+                    key={date}
+                    type="button"
+                    onClick={() => setNoteForm((current) => ({ ...current, dates: current.dates.filter((item) => item !== date) }))}
+                    className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700"
+                  >
+                    {date} ×
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-sm font-semibold text-gray-700">Màu tag</div>
+              <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-12">
+                {notePalette.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNoteForm((current) => ({ ...current, color }))}
+                    className={`h-8 rounded-md border ${noteForm.color === color ? "border-gray-950 ring-2 ring-gray-950/20" : "border-gray-200"}`}
+                    style={{ backgroundColor: color }}
+                    aria-label={`Chọn màu ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNoteModalOpen(false)}
+                className="rounded-md px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={!noteForm.title.trim() || !noteForm.dates.length && !noteForm.draftDate}
+                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <PaperAirplaneIcon className="h-4 w-4" />
+                Gửi thông báo
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -48,10 +48,6 @@ export default function Sidebar() {
   const showAvailabilityLink =
     role === "ADMIN" ||
     Boolean(availabilityAccess?.month && availabilityAccess?.year);
-  const isPayrollTab = (tab) =>
-    location.pathname === "/payroll" &&
-    new URLSearchParams(location.search).get("tab") === tab;
-
   const handleOpen = (value) => setOpen((current) => (current === value ? 0 : value));
 
   async function fetchNoti() {
@@ -140,17 +136,6 @@ export default function Sidebar() {
               Tổng quan
             </ListItem>
           </Link>
-
-          {role === "ADMIN" && (
-            <Link to="/statistics" className="block no-underline">
-              <ListItem className={`${baseItem} ${hoverItem} ${isActive("/statistics") ? activeItem : ""}`}>
-                <ListItemPrefix className="min-w-[24px]">
-                  <PresentationChartBarIcon className="h-5 w-5" />
-                </ListItemPrefix>
-                Thống kê vận hành
-              </ListItem>
-            </Link>
-          )}
 
           {role === "ADMIN" && (
             <Link to="/employeePage" className="block no-underline">
@@ -259,44 +244,14 @@ export default function Sidebar() {
           </Accordion>
 
           {role === "ADMIN" ? (
-            <Accordion open={open === 4}>
-              <ListItem className="p-0">
-                <AccordionHeader
-                  onClick={() => handleOpen(4)}
-                  className={`${baseItem} ${hoverItem} border-0 shadow-none`}
-                >
-                  <div className="flex flex-1 items-center gap-3">
-                    <ListItemPrefix className="min-w-[24px]">
-                      <CurrencyDollarIcon className="h-5 w-5" />
-                    </ListItemPrefix>
-                    <span>Lương</span>
-                  </div>
-                  <ChevronDownIcon className={`h-4 w-4 transition-transform ${open === 4 ? "rotate-180" : ""}`} />
-                </AccordionHeader>
+            <Link to="/payroll?tab=salary" className="block no-underline">
+              <ListItem className={`${baseItem} ${hoverItem} ${isActive("/payroll") ? activeItem : ""}`}>
+                <ListItemPrefix className="min-w-[24px]">
+                  <CurrencyDollarIcon className="h-5 w-5" />
+                </ListItemPrefix>
+                Tính lương
               </ListItem>
-
-              <AccordionBody className="py-1">
-                <List>
-                  <Link to="/payroll?tab=salary" className="block no-underline">
-                    <ListItem
-                      className={`${baseItem} ${hoverItem} pl-10 ${
-                        isPayrollTab("salary") ||
-                        (isActive("/payroll") && !location.search)
-                          ? activeItem
-                          : ""
-                      }`}
-                    >
-                      Tính lương
-                    </ListItem>
-                  </Link>
-                  <Link to="/payroll?tab=stats" className="block no-underline">
-                    <ListItem className={`${baseItem} ${hoverItem} pl-10 ${isPayrollTab("stats") ? activeItem : ""}`}>
-                      Thống kê
-                    </ListItem>
-                  </Link>
-                </List>
-              </AccordionBody>
-            </Accordion>
+            </Link>
           ) : (
             <Link to="/payroll" className="block no-underline">
               <ListItem className={`${baseItem} ${hoverItem} ${isActive("/payroll") ? activeItem : ""}`}>
@@ -317,6 +272,17 @@ export default function Sidebar() {
               Hồ sơ
             </ListItem>
           </Link>
+          )}
+
+          {role === "ADMIN" && (
+            <Link to="/statistics" className="block no-underline">
+              <ListItem className={`${baseItem} ${hoverItem} ${isActive("/statistics") ? activeItem : ""}`}>
+                <ListItemPrefix className="min-w-[24px]">
+                  <PresentationChartBarIcon className="h-5 w-5" />
+                </ListItemPrefix>
+                Thống kê vận hành
+              </ListItem>
+            </Link>
           )}
         </List>
       </div>

@@ -5,9 +5,11 @@ import {
   saveDraft,
   publishSchedule,
   getCurrentSchedules,
+  createScheduleNote,
   getDrafts,
   deleteDraft,
   getAvailability,
+  getScheduleNotes,
   getEmployeeStats,
   saveDraftWithName,
   getDraftsList,
@@ -36,6 +38,8 @@ router.delete("/draft/:id", verifyToken, deleteDraft);
 
 // Public routes
 router.get("/current", verifyToken, getCurrentSchedules);
+router.get("/notes", verifyToken, getScheduleNotes);
+router.post("/notes", verifyToken, createScheduleNote);
 router.get("/availability/:month/:year", verifyToken, getAvailability);
 router.get("/stats", verifyToken, getEmployeeStats);
 

@@ -636,6 +636,11 @@ export default function AutoScheduleModal({ open, onClose, onGenerate, scheduleS
         { headers: authHeaders() },
       );
       onGenerate?.(response.data);
+      window.appPopup?.({
+        type: "success",
+        title: "Đã lưu bản nháp",
+        message: `${draftName.trim()} đã được lưu.`,
+      });
       closeModal();
     } catch (err) {
       setNotice(err.response?.data?.message || err.message || "Không thể lưu nháp");
@@ -645,6 +650,15 @@ export default function AutoScheduleModal({ open, onClose, onGenerate, scheduleS
   };
 
   const handlePublish = async () => {
+    const confirmed = await window.appConfirm?.({
+      title: "Công bố lịch làm",
+      message: `Công bố lịch tháng ${month}/${year} cho nhân viên?`,
+      confirmText: "Công bố",
+      cancelText: "Kiểm tra lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
     try {
       setLoading(true);
       await axios.post(
@@ -657,6 +671,11 @@ export default function AutoScheduleModal({ open, onClose, onGenerate, scheduleS
         { headers: authHeaders() },
       );
       onGenerate?.({ month, year });
+      window.appPopup?.({
+        type: "success",
+        title: "Đã công bố lịch",
+        message: `Lịch tháng ${month}/${year} đã được gửi đến nhân viên.`,
+      });
       closeModal();
     } catch (err) {
       setNotice(err.response?.data?.message || err.message || "Không thể công bố lịch");

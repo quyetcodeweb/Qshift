@@ -93,6 +93,21 @@ async function ensureColumnExists(tableName, columnName, columnDefinition) {
   );
 }
 
+async function ensureScheduleNotesTable() {
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS schedule_notes (
+      note_id INT AUTO_INCREMENT PRIMARY KEY,
+      work_date DATE NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      color VARCHAR(20) DEFAULT '#2563eb',
+      created_by INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+      INDEX idx_schedule_notes_work_date (work_date)
+    )
+  `);
+}
+
 export async function autoGenerate(req, res) {
   try {
     const {
@@ -299,6 +314,97 @@ export async function getCurrentSchedules(req, res) {
     res.json(schedules);
   } catch (error) {
     console.error("[getCurrentSchedules] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function getScheduleNotes(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid user" });
+    }
+
+    await ensureScheduleNotesTable();
+
+    const conditions = [];
+    const params = [];
+
+    if (req.query.startDate) {
+      conditions.push("work_date >= ?");
+      params.push(req.query.startDate);
+    }
+    if (req.query.endDate) {
+      conditions.push("work_date <= ?");
+      params.push(req.query.endDate);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const [rows] = await database.query(
+      `SELECT note_id,
+              DATE_FORMAT(work_date, '%Y-%m-%d') AS work_date,
+              title,
+              color,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM schedule_notes
+       ${whereClause}
+       ORDER BY work_date ASC, created_at ASC`,
+      params
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("[getScheduleNotes] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function createScheduleNote(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    const [admins] = await database.query(
+      "SELECT role FROM users WHERE user_id = ?",
+      [userId]
+    );
+
+    if (!admins.length || admins[0].role !== "ADMIN") {
+      return res.status(403).json({ message: "Chỉ admin có thể gửi thông báo lịch" });
+    }
+
+    await ensureScheduleNotesTable();
+
+    const dates = Array.isArray(req.body.dates)
+      ? [...new Set(req.body.dates.map((date) => String(date).slice(0, 10)).filter(Boolean))]
+      : [];
+    const title = String(req.body.title || "").trim();
+    const color = /^#[0-9a-f]{6}$/i.test(String(req.body.color || ""))
+      ? String(req.body.color)
+      : "#2563eb";
+
+    if (!dates.length || !title) {
+      return res.status(400).json({ message: "Ngày và nội dung thông báo là bắt buộc" });
+    }
+
+    for (const workDate of dates) {
+      await database.query(
+        `INSERT INTO schedule_notes (work_date, title, color, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [workDate, title, color, userId]
+      );
+    }
+
+    const [employees] = await database.query("SELECT user_id FROM employees WHERE user_id IS NOT NULL");
+    for (const employee of employees) {
+      await database.query(
+        `INSERT INTO notifications (user_id, message, type, ref_id)
+         VALUES (?, ?, 'SCHEDULE_NOTE', NULL)`,
+        [employee.user_id, `Thông báo lịch: ${title} (${dates.join(", ")})`]
+      );
+    }
+
+    res.json({ message: "Đã gửi thông báo lịch", count: dates.length });
+  } catch (error) {
+    console.error("[createScheduleNote] Error:", error);
     res.status(500).json({ message: error.message });
   }
 }

@@ -39,9 +39,23 @@ export default function UserPage() {
       return;
     }
 
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa tài khoản",
+      message: `Xóa tài khoản ${user.username}?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
     try {
       await axios.delete(`${API_URL}/users/${user.user_id}`);
       fetchUsers();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa tài khoản",
+        message: `Tài khoản ${user.username} đã được xóa.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa tài khoản");
     }
@@ -53,12 +67,26 @@ export default function UserPage() {
       return;
     }
 
+    const confirmed = await window.appConfirm?.({
+      title: user.status ? "Vô hiệu hóa tài khoản" : "Kích hoạt tài khoản",
+      message: `${user.status ? "Vô hiệu hóa" : "Kích hoạt"} tài khoản ${user.username}?`,
+      confirmText: user.status ? "Vô hiệu hóa" : "Kích hoạt",
+      cancelText: "Hủy",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
     try {
       await axios.patch(
         `${API_URL}/users/${user.user_id}/status`,
         { status: !user.status },
       );
       fetchUsers();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đổi trạng thái",
+        message: `Tài khoản ${user.username} đã được cập nhật.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể đổi trạng thái");
     }
@@ -83,6 +111,11 @@ export default function UserPage() {
       );
       setOpen(false);
       fetchUsers();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã cập nhật tài khoản",
+        message: `Tài khoản ${selectedUser.username} đã được lưu.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể cập nhật tài khoản");
     }

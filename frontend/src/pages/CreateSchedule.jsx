@@ -419,6 +419,11 @@ export default function CreateSchedule() {
       });
       setSelectedSchedule(null);
       fetchSchedules();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa ca làm",
+        message: `${schedule.employee_name} - ${schedule.shift_name} đã được xóa khỏi lịch.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa ca làm");
     }
@@ -492,6 +497,11 @@ export default function CreateSchedule() {
       setEditingShift(null);
       fetchShifts();
       fetchSchedules();
+      window.appPopup?.({
+        type: "success",
+        title: editingShift ? "Đã cập nhật loại ca" : "Đã tạo loại ca",
+        message: `Ca "${shiftForm.shift_name}" đã được lưu.`,
+      });
     } catch (err) {
       alert(
         err.response?.data?.message ||
@@ -517,6 +527,11 @@ export default function CreateSchedule() {
       });
       fetchShifts();
       fetchSchedules();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa loại ca",
+        message: `Ca "${shift.shift_name}" đã được xóa.`,
+      });
     } catch (err) {
       alert(
         err.response?.data?.message ||
@@ -532,6 +547,11 @@ export default function CreateSchedule() {
         headers: authHeaders(),
       });
       setSettingsOpen(false);
+      window.appPopup?.({
+        type: "success",
+        title: "Đã lưu cài đặt",
+        message: "Thiết lập tạo lịch tự động đã được cập nhật.",
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể lưu cài đặt");
     }

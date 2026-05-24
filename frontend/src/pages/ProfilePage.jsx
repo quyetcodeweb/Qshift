@@ -368,12 +368,22 @@ export default function ProfilePage() {
       );
       setPasswordForm({ currentPassword: "", password: "", confirmPassword: "" });
       setSuccess("Đã đổi mật khẩu tài khoản");
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đổi mật khẩu",
+        message: "Mật khẩu tài khoản đã được cập nhật.",
+      });
     } catch (err) {
-      setError(
+      const message =
         err.response?.data?.message ||
-          err.response?.data?.error ||
-          "Không thể đổi mật khẩu",
-      );
+        err.response?.data?.error ||
+        "Không thể đổi mật khẩu";
+      setError(message);
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể đổi mật khẩu",
+        message,
+      });
     } finally {
       setSavingPassword(false);
     }

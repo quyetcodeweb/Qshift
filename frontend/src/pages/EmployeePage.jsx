@@ -377,6 +377,11 @@ export default function EmployeePage() {
       if (editingEmployee) {
         setSelectedEmployee({ ...editingEmployee, ...form });
       }
+      window.appPopup?.({
+        type: "success",
+        title: editingEmployee ? "Đã cập nhật nhân viên" : "Đã thêm nhân viên",
+        message: `${form.name} đã được lưu vào hệ thống.`,
+      });
     } catch (err) {
       alert(
         err.response?.data?.message ||
@@ -418,6 +423,15 @@ export default function EmployeePage() {
       return;
     }
 
+    const confirmed = await window.appConfirm?.({
+      title: user.status ? "Vô hiệu hóa tài khoản" : "Kích hoạt tài khoản",
+      message: `${user.status ? "Vô hiệu hóa" : "Kích hoạt"} tài khoản ${user.username}?`,
+      confirmText: user.status ? "Vô hiệu hóa" : "Kích hoạt",
+      cancelText: "Hủy",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
     try {
       await axios.patch(
         `${API_URL}/users/${user.user_id}/status`,
@@ -428,6 +442,11 @@ export default function EmployeePage() {
       if (selectedEmployee) {
         setSelectedEmployee({ ...selectedEmployee });
       }
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đổi trạng thái",
+        message: `Tài khoản ${user.username} đã được cập nhật.`,
+      });
     } catch (err) {
       alert(
         err.response?.data?.message || "Không thể đổi trạng thái tài khoản",
@@ -446,12 +465,22 @@ export default function EmployeePage() {
       );
       setSelectedRole("");
       fetchEmployeeRoles();
+      window.appPopup?.({ type: "success", title: "Đã thêm vai trò", message: "Vai trò đã được gán cho nhân viên." });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể thêm vai trò");
     }
   };
 
   const removeEmployeeRole = async (roleId) => {
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa vai trò nhân viên",
+      message: "Xóa vai trò này khỏi nhân viên đang chọn?",
+      confirmText: "Xóa vai trò",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
     try {
       await axios.delete(
         `${API_URL}/roles/employee/${selectedRoleEmployee}/${roleId}`,
@@ -460,6 +489,7 @@ export default function EmployeePage() {
         },
       );
       fetchEmployeeRoles();
+      window.appPopup?.({ type: "success", title: "Đã xóa vai trò", message: "Vai trò đã được gỡ khỏi nhân viên." });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa vai trò");
     }
@@ -485,6 +515,7 @@ export default function EmployeePage() {
         headers: authHeaders(),
       });
       setRoles(res.data || []);
+      window.appPopup?.({ type: "success", title: "Đã tạo vai trò", message: `Vai trò ${newRoleName.trim()} đã được tạo.` });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể tạo vai trò");
     }

@@ -71,6 +71,24 @@ async function ensurePayrollResolutionsTable() {
   `);
 }
 
+async function ensurePayrollAdjustmentsTable() {
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS payroll_adjustments (
+      adjustment_id INT AUTO_INCREMENT PRIMARY KEY,
+      employee_id INT NOT NULL,
+      work_date DATE NOT NULL,
+      type ENUM('BONUS','PENALTY') NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      note TEXT,
+      created_by INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+      INDEX idx_payroll_adjustments_employee_date (employee_id, work_date)
+    )
+  `);
+}
+
 async function getPayrollSettingsValue() {
   await ensurePayrollSettingsTable();
 
@@ -109,7 +127,9 @@ function toMysqlDateTime(value) {
 function buildDetailStatus(row, payableMinutes, lateMinutes, earlyLeaveMinutes, resolvedPay) {
   if (row.resolution_action === "NO_PAY") return "RESOLVED_NO_PAY";
   if (resolvedPay) return "RESOLVED_PAY";
+  if (row.is_future && !row.effective_check_in) return "UPCOMING";
   if (!row.effective_check_in) return "MISSING_CHECK_IN";
+  if (!row.is_issue_due && !row.effective_check_out) return "IN_PROGRESS";
   if (!row.effective_check_out) return "MISSING_CHECK_OUT";
   if (payableMinutes <= 0) return "NO_PAYABLE_TIME";
   if (row.attendance_status === "LATE" || lateMinutes > 0) return "LATE";
@@ -119,6 +139,7 @@ function buildDetailStatus(row, payableMinutes, lateMinutes, earlyLeaveMinutes, 
 
 async function buildPayrollDetails({ employeeId, startDate, endDate, settings }) {
   await ensurePayrollResolutionsTable();
+  await ensurePayrollAdjustmentsTable();
 
   const conditions = ["s.status = 'PUBLISHED'"];
   const params = [];
@@ -158,12 +179,27 @@ async function buildPayrollDetails({ employeeId, startDate, endDate, settings })
       DATE_FORMAT(pr.override_check_in, '%Y-%m-%d %H:%i:%s') AS override_check_in,
       DATE_FORMAT(pr.override_check_out, '%Y-%m-%d %H:%i:%s') AS override_check_out,
       pr.note AS resolution_note,
-      DATE_FORMAT(pr.resolved_at, '%Y-%m-%d %H:%i:%s') AS resolved_at
+      DATE_FORMAT(pr.resolved_at, '%Y-%m-%d %H:%i:%s') AS resolved_at,
+      COALESCE(adj.adjustment_amount, 0) AS adjustment_amount,
+      COALESCE(adj.bonus_amount, 0) AS bonus_amount,
+      COALESCE(adj.penalty_amount, 0) AS penalty_amount,
+      adj.adjustment_notes
      FROM schedules s
      JOIN employees e ON s.employee_id = e.employee_id
      JOIN shifts sh ON s.shift_id = sh.shift_id
      LEFT JOIN attendance a ON a.schedule_id = s.schedule_id
      LEFT JOIN payroll_resolutions pr ON pr.schedule_id = s.schedule_id
+     LEFT JOIN (
+       SELECT
+        employee_id,
+        work_date,
+        SUM(CASE WHEN type = 'BONUS' THEN amount ELSE -amount END) AS adjustment_amount,
+        SUM(CASE WHEN type = 'BONUS' THEN amount ELSE 0 END) AS bonus_amount,
+        SUM(CASE WHEN type = 'PENALTY' THEN amount ELSE 0 END) AS penalty_amount,
+        GROUP_CONCAT(CONCAT(type, ':', ROUND(amount), ':', COALESCE(note, '')) SEPARATOR '||') AS adjustment_notes
+       FROM payroll_adjustments
+       GROUP BY employee_id, work_date
+     ) adj ON adj.employee_id = s.employee_id AND adj.work_date = s.work_date
      WHERE ${conditions.join(" AND ")}
      ORDER BY s.work_date DESC, sh.start_time DESC, e.name ASC`,
     params
@@ -206,6 +242,13 @@ async function buildPayrollDetails({ employeeId, startDate, endDate, settings })
       checkOut && scheduledEnd
         ? Math.max((scheduledEnd.getTime() - checkOut.getTime()) / 60000, 0)
         : 0;
+    const now = new Date();
+    const isStarted = scheduledStart ? now >= scheduledStart : false;
+    const isEnded = scheduledEnd ? now >= scheduledEnd : false;
+    const isIssueDue = Boolean(
+      (isStarted && (!effectiveCheckIn || row.attendance_status === "LATE" || lateMinutes > 0)) ||
+        (isEnded && (!effectiveCheckOut || basePayableMinutes <= 0))
+    );
     const hourlyRate = Number(row.hourly_rate || 0);
     const isValidByAttendance = hasValidTimes && basePayableMinutes > 0;
     const isPayable =
@@ -218,10 +261,16 @@ async function buildPayrollDetails({ employeeId, startDate, endDate, settings })
           : 0;
     const payableHours = roundHours(payableMinutes);
     const status = buildDetailStatus(
-      { ...row, effective_check_in: effectiveCheckIn, effective_check_out: effectiveCheckOut },
+      {
+        ...row,
+        effective_check_in: effectiveCheckIn,
+        effective_check_out: effectiveCheckOut,
+        is_future: !isStarted,
+        is_issue_due: isIssueDue,
+      },
       payableMinutes,
-      lateMinutes,
-      earlyLeaveMinutes,
+      resolvedPay ? 0 : lateMinutes,
+      resolvedPay ? 0 : earlyLeaveMinutes,
       resolvedPay,
     );
 
@@ -237,13 +286,20 @@ async function buildPayrollDetails({ employeeId, startDate, endDate, settings })
       scheduled_hours: roundHours(scheduledMinutes),
       actual_hours: roundHours(actualMinutes),
       payable_hours: payableHours,
-      late_minutes: Math.round(lateMinutes),
-      early_leave_minutes: Math.round(earlyLeaveMinutes),
+      late_minutes: resolvedPay ? 0 : Math.round(lateMinutes),
+      early_leave_minutes: resolvedPay ? 0 : Math.round(earlyLeaveMinutes),
       salary: Math.round(payableHours * hourlyRate),
+      adjustment_amount: Number(row.adjustment_amount || 0),
+      bonus_amount: Number(row.bonus_amount || 0),
+      penalty_amount: Number(row.penalty_amount || 0),
+      adjustment_notes: row.adjustment_notes || "",
       payroll_status: status,
       is_payable: isPayable,
       is_resolved: Boolean(row.resolution_action),
-      needs_resolution: !isValidByAttendance && !row.resolution_action,
+      needs_resolution:
+        !row.resolution_action &&
+        isIssueDue &&
+        (!isValidByAttendance || row.attendance_status === "LATE" || lateMinutes > 0),
       calculation_mode: settings.calculation_mode,
     };
   });
@@ -271,6 +327,10 @@ function buildPayrollRows(details) {
         actual_hours: 0,
         worked_hours: 0,
         total_salary: 0,
+        adjustment_salary: 0,
+        bonus_salary: 0,
+        penalty_salary: 0,
+        adjustment_keys: new Set(),
       });
     }
 
@@ -282,8 +342,15 @@ function buildPayrollRows(details) {
       row.on_time_shifts += 1;
     }
     if (!detail.effective_check_in) row.missing_shifts += 1;
-    if (["MISSING_CHECK_IN", "MISSING_CHECK_OUT", "NO_PAYABLE_TIME"].includes(detail.payroll_status)) {
+    if (detail.needs_resolution) {
       row.issue_shifts += 1;
+    }
+    const adjustmentKey = `${detail.employee_id}-${detail.work_date}`;
+    if (!row.adjustment_keys.has(adjustmentKey)) {
+      row.adjustment_salary += Number(detail.adjustment_amount || 0);
+      row.bonus_salary += Number(detail.bonus_amount || 0);
+      row.penalty_salary += Number(detail.penalty_amount || 0);
+      row.adjustment_keys.add(adjustmentKey);
     }
     row.scheduled_hours += Number(detail.scheduled_hours || 0);
     row.actual_hours += Number(detail.actual_hours || 0);
@@ -297,7 +364,11 @@ function buildPayrollRows(details) {
       scheduled_hours: Number(row.scheduled_hours.toFixed(2)),
       actual_hours: Number(row.actual_hours.toFixed(2)),
       worked_hours: Number(row.worked_hours.toFixed(2)),
-      total_salary: Math.round(row.total_salary),
+      adjustment_salary: Math.round(row.adjustment_salary),
+      bonus_salary: Math.round(row.bonus_salary),
+      penalty_salary: Math.round(row.penalty_salary),
+      adjustment_keys: undefined,
+      total_salary: Math.round(row.total_salary + row.adjustment_salary),
       productivity: row.total_shifts ? Math.round((row.attended_shifts / row.total_shifts) * 100) : 0,
       efficiency: row.attended_shifts ? Math.round((row.on_time_shifts / row.attended_shifts) * 100) : 0,
     }))
@@ -337,6 +408,9 @@ export async function getPayrollSummary(req, res) {
         acc.actual_hours += row.actual_hours;
         acc.worked_hours += row.worked_hours;
         acc.total_salary += row.total_salary;
+        acc.adjustment_salary += row.adjustment_salary || 0;
+        acc.bonus_salary += row.bonus_salary || 0;
+        acc.penalty_salary += row.penalty_salary || 0;
         return acc;
       },
       {
@@ -350,6 +424,9 @@ export async function getPayrollSummary(req, res) {
         actual_hours: 0,
         worked_hours: 0,
         total_salary: 0,
+        adjustment_salary: 0,
+        bonus_salary: 0,
+        penalty_salary: 0,
       }
     );
 
@@ -449,6 +526,111 @@ export async function resolvePayrollSchedule(req, res) {
     res.json({ message: "Da xu ly ca tinh luong" });
   } catch (error) {
     console.error("[resolvePayrollSchedule] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function createPayrollAdjustment(req, res) {
+  try {
+    const user = await getUser(req.user?.user_id);
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    await ensurePayrollAdjustmentsTable();
+
+    const employeeId = Number(req.body.employee_id);
+    const workDate = String(req.body.work_date || "").slice(0, 10);
+    const type = req.body.type === "PENALTY" ? "PENALTY" : "BONUS";
+    const amount = Math.abs(Number(req.body.amount || 0));
+    const note = String(req.body.note || "").trim();
+
+    if (!employeeId || !workDate || !amount) {
+      return res.status(400).json({ message: "employee_id, work_date va amount la bat buoc" });
+    }
+
+    const [result] = await database.query(
+      `INSERT INTO payroll_adjustments (employee_id, work_date, type, amount, note, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [employeeId, workDate, type, amount, note || null, user.user_id]
+    );
+
+    const [employees] = await database.query(
+      "SELECT user_id FROM employees WHERE employee_id = ?",
+      [employeeId]
+    );
+    const employee = employees[0];
+    if (employee?.user_id) {
+      const label = type === "BONUS" ? "thưởng" : "phạt";
+      await database.query(
+        `INSERT INTO notifications (user_id, message, type, ref_id)
+         VALUES (?, ?, 'PAYROLL_ADJUSTMENT', ?)`,
+        [
+          employee.user_id,
+          `Bạn có khoản ${label} ${Math.round(amount).toLocaleString("vi-VN")}đ ngày ${workDate}${note ? `: ${note}` : ""}`,
+          result.insertId,
+        ]
+      );
+    }
+
+    res.json({ message: "Đã lưu thưởng/phạt", adjustment_id: result.insertId });
+  } catch (error) {
+    console.error("[createPayrollAdjustment] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function getPayrollAdjustments(req, res) {
+  try {
+    const user = await getUser(req.user?.user_id);
+    if (!user) {
+      return res.status(401).json({ message: "Invalid user" });
+    }
+
+    await ensurePayrollAdjustmentsTable();
+
+    const conditions = [];
+    const params = [];
+
+    if (user.role !== "ADMIN") {
+      const employee = await getEmployeeByUserId(user.user_id);
+      if (!employee) return res.json([]);
+      conditions.push("pa.employee_id = ?");
+      params.push(employee.employee_id);
+    } else if (req.query.employee_id && req.query.employee_id !== "all") {
+      conditions.push("pa.employee_id = ?");
+      params.push(Number(req.query.employee_id));
+    }
+
+    if (req.query.startDate) {
+      conditions.push("pa.work_date >= ?");
+      params.push(req.query.startDate);
+    }
+    if (req.query.endDate) {
+      conditions.push("pa.work_date <= ?");
+      params.push(req.query.endDate);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const [rows] = await database.query(
+      `SELECT pa.adjustment_id,
+              pa.employee_id,
+              e.name AS employee_name,
+              DATE_FORMAT(pa.work_date, '%Y-%m-%d') AS work_date,
+              pa.type,
+              pa.amount,
+              pa.note,
+              DATE_FORMAT(pa.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM payroll_adjustments pa
+       JOIN employees e ON pa.employee_id = e.employee_id
+       ${whereClause}
+       ORDER BY pa.work_date DESC, pa.created_at DESC`,
+      params
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("[getPayrollAdjustments] Error:", error);
     res.status(500).json({ message: error.message });
   }
 }

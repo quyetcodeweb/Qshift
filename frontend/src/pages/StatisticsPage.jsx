@@ -161,6 +161,24 @@ function Metric({ icon, label, value, helper, tone = "blue" }) {
   );
 }
 
+function SolidButton({ children, onClick, disabled, active = true }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        backgroundColor: active ? "#0f172a" : "#ffffff",
+        color: active ? "#ffffff" : "#334155",
+        borderColor: active ? "#0f172a" : "#cbd5e1",
+      }}
+      className="inline-flex h-11 items-center justify-center gap-2 rounded-md border px-4 text-sm font-black transition hover:opacity-90 disabled:opacity-60"
+    >
+      {children}
+    </button>
+  );
+}
+
 function Section({ title, subtitle, action, children }) {
   return (
     <section className="rounded-md border border-slate-200 bg-white shadow-sm">
@@ -568,15 +586,10 @@ export default function StatisticsPage() {
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              onClick={fetchData}
-              disabled={loading}
-              className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
-            >
+            <SolidButton onClick={fetchData} disabled={loading}>
               <ArrowPathIcon className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
               Làm mới
-            </button>
+            </SolidButton>
           </div>
         </div>
       </section>
@@ -589,11 +602,12 @@ export default function StatisticsPage() {
               key={view.key}
               type="button"
               onClick={() => setActiveView(view.key)}
-              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-black transition ${
-                activeView === view.key
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-              }`}
+              style={{
+                backgroundColor: activeView === view.key ? "#0f172a" : "#ffffff",
+                color: activeView === view.key ? "#ffffff" : "#475569",
+                borderColor: activeView === view.key ? "#0f172a" : "transparent",
+              }}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-black transition hover:opacity-90"
             >
               <ViewIcon className="h-4 w-4" />
               {view.label}
@@ -636,7 +650,7 @@ export default function StatisticsPage() {
               icon={BanknotesIcon}
               label="Lương tạm tính"
               value={money(payrollTotals.total_salary)}
-              helper={`${fmt(payrollTotals.worked_hours, 1)} giờ được trả, TB ${money(salaryStats.avgSalary)}/người`}
+              helper={`Thưởng ${money(payrollTotals.bonus_salary)}, phạt ${money(payrollTotals.penalty_salary)}`}
               tone="orange"
             />
             <Metric
@@ -681,6 +695,18 @@ export default function StatisticsPage() {
                     <div className="text-sm font-bold text-orange-700">Ca cần xử lý</div>
                     <div className="mt-1 text-2xl font-black text-orange-950">
                       {fmt(payrollTotals.issue_shifts)}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-emerald-50 p-4">
+                    <div className="text-sm font-bold text-emerald-700">Tổng thưởng</div>
+                    <div className="mt-1 text-2xl font-black text-emerald-950">
+                      {money(payrollTotals.bonus_salary)}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-red-50 p-4">
+                    <div className="text-sm font-bold text-red-700">Tổng phạt</div>
+                    <div className="mt-1 text-2xl font-black text-red-950">
+                      {money(payrollTotals.penalty_salary)}
                     </div>
                   </div>
                 </div>

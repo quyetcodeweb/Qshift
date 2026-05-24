@@ -440,6 +440,11 @@ export default function ShiftSwapManagementPage() {
       setReasonById((prev) => ({ ...prev, [id]: "" }));
       await fetchRequests();
       window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xử lý yêu cầu",
+        message: "Trạng thái yêu cầu đổi ca đã được cập nhật.",
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xử lý yêu cầu đổi ca");
     } finally {
@@ -466,9 +471,13 @@ export default function ShiftSwapManagementPage() {
 
   const deleteAvailability = async (request) => {
     const employeeName = request.employee_name || request.email || `User #${request.user_id}`;
-    const confirmed = window.confirm(
-      `Xóa yêu cầu nhập lịch rảnh tháng ${request.month}/${request.year} của ${employeeName}?`,
-    );
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa yêu cầu nhập lịch rảnh",
+      message: `Xóa yêu cầu nhập lịch rảnh tháng ${request.month}/${request.year} của ${employeeName}?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
 
     if (!confirmed) return;
 
@@ -480,6 +489,11 @@ export default function ShiftSwapManagementPage() {
       setRequests((prev) => prev.filter((item) => item.request_key !== request.request_key));
       setSelectedRequestKeys((keys) => keys.filter((key) => key !== request.request_key));
       window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa yêu cầu",
+        message: "Yêu cầu nhập lịch rảnh đã được xóa.",
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa yêu cầu");
     } finally {
@@ -490,9 +504,13 @@ export default function ShiftSwapManagementPage() {
   const deleteSelectedAvailability = async () => {
     if (selectedAvailabilityRequests.length === 0) return;
 
-    const confirmed = window.confirm(
-      `Xóa ${selectedAvailabilityRequests.length} yêu cầu nhập lịch rảnh đã chọn?`,
-    );
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa nhiều yêu cầu",
+      message: `Xóa ${selectedAvailabilityRequests.length} yêu cầu nhập lịch rảnh đã chọn?`,
+      confirmText: "Xóa",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
 
     if (!confirmed) return;
 
@@ -511,6 +529,11 @@ export default function ShiftSwapManagementPage() {
       setRequests((prev) => prev.filter((request) => !deletedKeys.has(request.request_key)));
       setSelectedRequestKeys([]);
       window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa yêu cầu đã chọn",
+        message: `${deletedKeys.size} yêu cầu nhập lịch rảnh đã được xóa.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa các yêu cầu đã chọn");
     } finally {

@@ -73,13 +73,13 @@ function MobileChrome() {
   ];
   const adminItems = [
     { to: "/", label: "Tổng quan", icon: HomeIcon },
-    { to: "/statistics", label: "Thống kê", icon: HomeIcon },
     { to: "/employeePage", label: "Nhân sự", icon: UsersIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
     { to: "/createSchedule", label: "Tạo lịch", icon: ClipboardDocumentListIcon },
     { to: "/availabilityPage", label: "Rảnh", icon: CalendarDaysIcon },
     { to: "/attendance", label: "Công", icon: ClockIcon },
     { to: "/profile", label: "Hồ sơ", icon: UserCircleIcon },
+    { to: "/statistics", label: "Thống kê", icon: HomeIcon },
   ];
   const items = role === "ADMIN"
     ? adminItems.filter((item) => item.to !== "/profile")
