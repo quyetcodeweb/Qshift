@@ -209,7 +209,7 @@ export default function Sidebar() {
                   <Link to="/shiftSwaps" className="block no-underline">
                     <ListItem className={`${baseItem} ${hoverItem} pl-10 ${isActive("/shiftSwaps") ? activeItem : ""}`}>
                       <ChevronRightIcon className="h-3 w-3 opacity-70" />
-                      Quản lý đổi ca
+                      Quản lý yêu cầu
                     </ListItem>
                   </Link>
                 )}

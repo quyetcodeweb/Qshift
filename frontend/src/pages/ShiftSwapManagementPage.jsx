@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   ArrowPathIcon,
+  BellAlertIcon,
   CalendarDaysIcon,
   CheckCircleIcon,
   ClockIcon,
   FunnelIcon,
   MagnifyingGlassIcon,
   NoSymbolIcon,
-  UserGroupIcon,
+  TrashIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
@@ -54,6 +55,30 @@ const statusMeta = {
     count: "bg-violet-100 text-violet-800",
     group: "resolved",
   },
+  AVAILABILITY_PENDING: {
+    label: "Chờ nhập lịch rảnh",
+    tone: "border-cyan-200 bg-cyan-50 text-cyan-800",
+    dot: "bg-cyan-500",
+    active: "border-cyan-300 bg-cyan-50 text-cyan-800",
+    count: "bg-cyan-100 text-cyan-800",
+    group: "unresolved",
+  },
+  AVAILABILITY_APPROVED: {
+    label: "Đã nhập lịch rảnh",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    dot: "bg-emerald-500",
+    active: "border-emerald-300 bg-emerald-50 text-emerald-800",
+    count: "bg-emerald-100 text-emerald-800",
+    group: "resolved",
+  },
+  AVAILABILITY_REJECTED: {
+    label: "Lịch rảnh bị từ chối",
+    tone: "border-red-200 bg-red-50 text-red-800",
+    dot: "bg-red-500",
+    active: "border-red-300 bg-red-50 text-red-800",
+    count: "bg-red-100 text-red-800",
+    group: "resolved",
+  },
 };
 
 const groupFilters = [
@@ -62,13 +87,7 @@ const groupFilters = [
   { value: "resolved", label: "Đã giải quyết" },
 ];
 
-const statusOptions = [
-  { value: "all", label: "Mọi trạng thái" },
-  ...Object.entries(statusMeta).map(([value, meta]) => ({
-    value,
-    label: meta.label,
-  })),
-];
+const REQUEST_BATCH_SIZE = 12;
 
 function authHeaders() {
   const token = localStorage.getItem("token");
@@ -84,6 +103,11 @@ function formatDateTime(value) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function dateValue(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
 }
 
 function formatDate(value) {
@@ -111,6 +135,12 @@ function shiftSummary(request, owner) {
 
 function requestSearchText(request) {
   return [
+    request.kind === "availability" ? "lịch rảnh yêu cầu nhập lịch rảnh" : "đổi ca",
+    request.employee_name,
+    request.employee_code,
+    request.email,
+    request.month,
+    request.year,
     request.requester_employee_name,
     request.target_employee_name,
     request.requester_shift_name,
@@ -120,11 +150,19 @@ function requestSearchText(request) {
     request.requester_note,
     request.admin_cancel_reason,
     request.admin_revert_reason,
-    statusMeta[request.status]?.label,
+    statusMeta[getStatusKey(request)]?.label,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function getStatusKey(request) {
+  if (request.kind === "availability") {
+    return `AVAILABILITY_${request.status || "PENDING"}`;
+  }
+
+  return request.status;
 }
 
 function normalizeRequests(data) {
@@ -134,6 +172,24 @@ function normalizeRequests(data) {
   return [];
 }
 
+function normalizeAvailabilityRequests(data) {
+  const rows = normalizeRequests(data);
+  return rows.map((request) => ({
+    ...request,
+    kind: "availability",
+    status: request.status || "PENDING",
+    request_key: `availability-${request.id}`,
+  }));
+}
+
+function normalizeSwapRequests(data) {
+  return normalizeRequests(data).map((request) => ({
+    ...request,
+    kind: "swap",
+    request_key: `swap-${request.swap_request_id}`,
+  }));
+}
+
 function StatTile({ icon, label, value, active, onClick }) {
   const StatIcon = icon;
 
@@ -141,18 +197,18 @@ function StatTile({ icon, label, value, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-20 w-full items-center gap-3 rounded-md border p-3 text-left transition ${
+      className={`flex min-h-14 w-full items-center gap-2 rounded-md border p-2 text-left transition ${
         active
           ? "border-blue-300 bg-blue-50 text-blue-800"
           : "border-gray-200 bg-white text-gray-800 hover:border-blue-200 hover:bg-gray-50"
       }`}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-700">
-        <StatIcon className="h-5 w-5" />
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-700">
+        <StatIcon className="h-4 w-4" />
       </span>
       <span className="min-w-0">
-        <span className="block text-2xl font-bold leading-7">{value}</span>
-        <span className="block text-xs font-semibold uppercase text-gray-500">{label}</span>
+        <span className="block text-lg font-bold leading-5">{value}</span>
+        <span className="block truncate text-[11px] font-semibold uppercase text-gray-500">{label}</span>
       </span>
     </button>
   );
@@ -177,27 +233,63 @@ function ShiftBlock({ title, person, shift }) {
   );
 }
 
+function AvailabilityBlock({ request }) {
+  return (
+    <div className="rounded-md border border-gray-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold uppercase text-gray-500">Nhập lịch rảnh</span>
+        <span className="text-xs font-semibold text-gray-500">
+          Tháng {request.month}/{request.year}
+        </span>
+      </div>
+      <div className="mt-2 text-sm font-bold text-gray-950">
+        {request.employee_name || request.email || `User #${request.user_id}`}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-gray-600">
+        <span>{request.employee_code || "Chưa có mã nhân viên"}</span>
+        <span className="text-gray-300">|</span>
+        <span>{request.email || "--"}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ShiftSwapManagementPage() {
   const [requests, setRequests] = useState([]);
   const [reasonById, setReasonById] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
+  const [selectedRequestKeys, setSelectedRequestKeys] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(REQUEST_BATCH_SIZE);
 
   const fetchRequests = useCallback(async () => {
     setError("");
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/shift-swaps`, {
-        headers: authHeaders(),
-      });
-      setRequests(normalizeRequests(res.data));
+      const [swapRes, availabilityRes] = await Promise.all([
+        axios.get(`${API_URL}/shift-swaps`, {
+          headers: authHeaders(),
+        }),
+        axios.get(`${API_URL}/availability/requests/all`, {
+          headers: authHeaders(),
+        }),
+      ]);
+
+      setRequests([
+        ...normalizeAvailabilityRequests(availabilityRes.data),
+        ...normalizeSwapRequests(swapRes.data),
+      ].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)));
     } catch (err) {
       console.error("[ShiftSwapManagement] Load error:", err);
-      setError(err.response?.data?.message || "Không thể tải request đổi ca");
+      setError(err.response?.data?.message || "Không thể tải danh sách yêu cầu");
     } finally {
       setLoading(false);
     }
@@ -213,28 +305,120 @@ export default function ShiftSwapManagementPage() {
     let resolved = 0;
 
     requests.forEach((request) => {
-      byStatus[request.status] = (byStatus[request.status] || 0) + 1;
-      if (statusMeta[request.status]?.group === "unresolved") unresolved += 1;
+      const statusKey = getStatusKey(request);
+      byStatus[statusKey] = (byStatus[statusKey] || 0) + 1;
+      if (statusMeta[statusKey]?.group === "unresolved") unresolved += 1;
       else resolved += 1;
     });
 
     return { total: requests.length, unresolved, resolved, byStatus };
   }, [requests]);
 
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: `Mọi trạng thái (${stats.total})` },
+      ...Object.entries(statusMeta).map(([value, meta]) => ({
+        value,
+        label: `${meta.label} (${stats.byStatus[value] || 0})`,
+      })),
+    ],
+    [stats],
+  );
+
   const filteredRequests = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
     return requests.filter((request) => {
-      const meta = statusMeta[request.status];
+      const createdDate = dateValue(request.created_at);
+      const statusKey = getStatusKey(request);
+      const meta = statusMeta[statusKey];
       const matchesGroup = groupFilter === "all" || meta?.group === groupFilter;
-      const matchesStatus = statusFilter === "all" || request.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || statusKey === statusFilter;
       const matchesQuery = !keyword || requestSearchText(request).includes(keyword);
-      return matchesGroup && matchesStatus && matchesQuery;
+      const matchesDate = !dateFilter || createdDate === dateFilter;
+      const matchesDateFrom = !dateFromFilter || createdDate >= dateFromFilter;
+      const matchesDateTo = !dateToFilter || createdDate <= dateToFilter;
+
+      return matchesGroup && matchesStatus && matchesQuery && matchesDate && matchesDateFrom && matchesDateTo;
     });
-  }, [groupFilter, query, requests, statusFilter]);
+  }, [dateFilter, dateFromFilter, dateToFilter, groupFilter, query, requests, statusFilter]);
+
+  const visibleRequests = useMemo(
+    () => filteredRequests.slice(0, visibleCount),
+    [filteredRequests, visibleCount],
+  );
+
+  const visibleAvailabilityRequests = useMemo(
+    () => visibleRequests.filter((request) => request.kind === "availability"),
+    [visibleRequests],
+  );
+
+  const selectedAvailabilityRequests = useMemo(
+    () =>
+      requests.filter(
+        (request) =>
+          request.kind === "availability" &&
+          selectedRequestKeys.includes(request.request_key),
+      ),
+    [requests, selectedRequestKeys],
+  );
+
+  const allVisibleAvailabilitySelected =
+    visibleAvailabilityRequests.length > 0 &&
+    visibleAvailabilityRequests.every((request) =>
+      selectedRequestKeys.includes(request.request_key),
+    );
+
+  useEffect(() => {
+    setVisibleCount(REQUEST_BATCH_SIZE);
+  }, [dateFilter, dateFromFilter, dateToFilter, groupFilter, query, requests, statusFilter]);
+
+  useEffect(() => {
+    const validKeys = new Set(requests.map((request) => request.request_key));
+    setSelectedRequestKeys((keys) => keys.filter((key) => validKeys.has(key)));
+  }, [requests]);
+
+  const loadMoreRequests = useCallback(() => {
+    setVisibleCount((count) =>
+      Math.min(count + REQUEST_BATCH_SIZE, filteredRequests.length),
+    );
+  }, [filteredRequests.length]);
+
+  const handleListScroll = useCallback(
+    (event) => {
+      const target = event.currentTarget;
+      const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+      if (distanceToBottom < 180 && visibleCount < filteredRequests.length) {
+        loadMoreRequests();
+      }
+    },
+    [filteredRequests.length, loadMoreRequests, visibleCount],
+  );
 
   const setReason = (id, value) => {
     setReasonById((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const toggleRequestSelection = (requestKey) => {
+    setSelectedRequestKeys((keys) =>
+      keys.includes(requestKey)
+        ? keys.filter((key) => key !== requestKey)
+        : [...keys, requestKey],
+    );
+  };
+
+  const toggleVisibleAvailabilitySelection = () => {
+    const visibleKeys = visibleAvailabilityRequests.map((request) => request.request_key);
+
+    setSelectedRequestKeys((keys) => {
+      if (visibleKeys.length === 0) return keys;
+      if (visibleKeys.every((key) => keys.includes(key))) {
+        return keys.filter((key) => !visibleKeys.includes(key));
+      }
+
+      return [...new Set([...keys, ...visibleKeys])];
+    });
   };
 
   const submitAction = async (request, action) => {
@@ -263,15 +447,86 @@ export default function ShiftSwapManagementPage() {
     }
   };
 
+  const remindAvailability = async (request) => {
+    try {
+      setLoadingId(request.request_key);
+      await axios.post(
+        `${API_URL}/availability/requests/${request.id}/remind`,
+        {},
+        { headers: authHeaders() },
+      );
+      window.dispatchEvent(new Event("notification-count-changed"));
+      alert("Đã gửi thông báo nhắc nhở nhân viên nhập lịch rảnh");
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể gửi nhắc nhở");
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const deleteAvailability = async (request) => {
+    const employeeName = request.employee_name || request.email || `User #${request.user_id}`;
+    const confirmed = window.confirm(
+      `Xóa yêu cầu nhập lịch rảnh tháng ${request.month}/${request.year} của ${employeeName}?`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(request.request_key);
+      await axios.delete(`${API_URL}/availability/requests/${request.id}`, {
+        headers: authHeaders(),
+      });
+      setRequests((prev) => prev.filter((item) => item.request_key !== request.request_key));
+      setSelectedRequestKeys((keys) => keys.filter((key) => key !== request.request_key));
+      window.dispatchEvent(new Event("notification-count-changed"));
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể xóa yêu cầu");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const deleteSelectedAvailability = async () => {
+    if (selectedAvailabilityRequests.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Xóa ${selectedAvailabilityRequests.length} yêu cầu nhập lịch rảnh đã chọn?`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingId("bulk");
+      await Promise.all(
+        selectedAvailabilityRequests.map((request) =>
+          axios.delete(`${API_URL}/availability/requests/${request.id}`, {
+            headers: authHeaders(),
+          }),
+        ),
+      );
+      const deletedKeys = new Set(
+        selectedAvailabilityRequests.map((request) => request.request_key),
+      );
+      setRequests((prev) => prev.filter((request) => !deletedKeys.has(request.request_key)));
+      setSelectedRequestKeys([]);
+      window.dispatchEvent(new Event("notification-count-changed"));
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể xóa các yêu cầu đã chọn");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
-            Quản lý đổi ca
+            Quản lý yêu cầu
           </h1>
           <p className="mt-1 text-sm font-medium text-gray-600">
-            {stats.unresolved} request chưa giải quyết, {stats.resolved} request đã giải quyết.
+            {stats.unresolved} yêu cầu chưa giải quyết, {stats.resolved} yêu cầu đã giải quyết.
           </p>
         </div>
         <button
@@ -290,7 +545,7 @@ export default function ShiftSwapManagementPage() {
           <section className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <FunnelIcon className="h-5 w-5 text-blue-600" />
-              <h2 className="text-base font-bold text-gray-950">Bộ lọc request</h2>
+              <h2 className="text-base font-bold text-gray-950">Bộ lọc yêu cầu</h2>
             </div>
 
             <div className="relative">
@@ -303,7 +558,40 @@ export default function ShiftSwapManagementPage() {
               />
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2 rounded-md bg-gray-100 p-1">
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <StatTile
+                icon={CalendarDaysIcon}
+                label="Tổng"
+                value={stats.total}
+                active={groupFilter === "all" && statusFilter === "all"}
+                onClick={() => {
+                  setGroupFilter("all");
+                  setStatusFilter("all");
+                }}
+              />
+              <StatTile
+                icon={ClockIcon}
+                label="Chưa xử lý"
+                value={stats.unresolved}
+                active={groupFilter === "unresolved"}
+                onClick={() => {
+                  setGroupFilter("unresolved");
+                  setStatusFilter("all");
+                }}
+              />
+              <StatTile
+                icon={CheckCircleIcon}
+                label="Đã xử lý"
+                value={stats.resolved}
+                active={groupFilter === "resolved"}
+                onClick={() => {
+                  setGroupFilter("resolved");
+                  setStatusFilter("all");
+                }}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-1 rounded-md bg-gray-100 p-1">
               {groupFilters.map((item) => (
                 <button
                   key={item.value}
@@ -321,7 +609,7 @@ export default function ShiftSwapManagementPage() {
             </div>
 
             <label className="mt-4 block text-xs font-bold uppercase text-gray-500">
-              Loại request
+              Loại yêu cầu
             </label>
             <select
               value={statusFilter}
@@ -334,75 +622,50 @@ export default function ShiftSwapManagementPage() {
                 </option>
               ))}
             </select>
-          </section>
 
-          <section className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <UserGroupIcon className="h-5 w-5 text-blue-600" />
-              <h2 className="text-base font-bold text-gray-950">Thống kê</h2>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              <StatTile
-                icon={CalendarDaysIcon}
-                label="Tổng request"
-                value={stats.total}
-                active={groupFilter === "all" && statusFilter === "all"}
-                onClick={() => {
-                  setGroupFilter("all");
-                  setStatusFilter("all");
-                }}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <label className="col-span-2 block text-xs font-bold uppercase text-gray-500">
+                Ngày tạo
+              </label>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(event) => setDateFilter(event.target.value)}
+                className="col-span-2 h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-600"
               />
-              <StatTile
-                icon={ClockIcon}
-                label="Chưa giải quyết"
-                value={stats.unresolved}
-                active={groupFilter === "unresolved"}
-                onClick={() => {
-                  setGroupFilter("unresolved");
-                  setStatusFilter("all");
-                }}
+              <label className="block text-xs font-bold uppercase text-gray-500">
+                Từ ngày
+              </label>
+              <label className="block text-xs font-bold uppercase text-gray-500">
+                Đến ngày
+              </label>
+              <input
+                type="date"
+                value={dateFromFilter}
+                onChange={(event) => setDateFromFilter(event.target.value)}
+                className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-600"
               />
-              <StatTile
-                icon={CheckCircleIcon}
-                label="Đã giải quyết"
-                value={stats.resolved}
-                active={groupFilter === "resolved"}
-                onClick={() => {
-                  setGroupFilter("resolved");
-                  setStatusFilter("all");
-                }}
+              <input
+                type="date"
+                value={dateToFilter}
+                onChange={(event) => setDateToFilter(event.target.value)}
+                className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-600"
               />
             </div>
 
-            <div className="mt-4 space-y-2">
-              {Object.entries(statusMeta).map(([status, meta]) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter(status);
-                    setGroupFilter("all");
-                  }}
-                  className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition ${
-                    statusFilter === status
-                      ? meta.active
-                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-2 font-bold">
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
-                    <span className="truncate">{meta.label}</span>
-                  </span>
-                  <span
-                    className={`ml-3 rounded px-2 py-0.5 text-xs font-bold ${
-                      statusFilter === status ? meta.count : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {stats.byStatus[status] || 0}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {(dateFilter || dateFromFilter || dateToFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFilter("");
+                  setDateFromFilter("");
+                  setDateToFilter("");
+                }}
+                className="mt-3 h-9 w-full rounded-md border border-gray-200 bg-white text-sm font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                Xóa lọc thời gian
+              </button>
+            )}
           </section>
         </aside>
 
@@ -410,10 +673,31 @@ export default function ShiftSwapManagementPage() {
           <section className="rounded-md border border-gray-200 bg-white shadow-sm">
             <div className="flex flex-col gap-2 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-950">Danh sách request</h2>
+                <h2 className="text-lg font-bold text-gray-950">Danh sách yêu cầu</h2>
                 <p className="text-sm font-medium text-gray-500">
-                  Hiển thị {filteredRequests.length} trên {requests.length} request.
+                  Hiển thị {visibleRequests.length} trên {filteredRequests.length} yêu cầu phù hợp.
                 </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleVisibleAvailabilitySelection}
+                  disabled={visibleAvailabilityRequests.length === 0}
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-sm font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                >
+                  {allVisibleAvailabilitySelected ? "Bỏ chọn" : "Chọn lịch rảnh"}
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteSelectedAvailability}
+                  disabled={selectedAvailabilityRequests.length === 0 || deletingId === "bulk"}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-red-600 px-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  {deletingId === "bulk"
+                    ? "Đang xóa..."
+                    : `Xóa đã chọn (${selectedAvailabilityRequests.length})`}
+                </button>
               </div>
             </div>
 
@@ -432,32 +716,49 @@ export default function ShiftSwapManagementPage() {
             ) : filteredRequests.length === 0 ? (
               <div className="flex min-h-80 flex-col items-center justify-center p-8 text-center">
                 <NoSymbolIcon className="h-12 w-12 text-gray-300" />
-                <div className="mt-3 text-base font-bold text-gray-900">Không có request phù hợp</div>
+                <div className="mt-3 text-base font-bold text-gray-900">Không có yêu cầu phù hợp</div>
                 <div className="mt-1 text-sm font-medium text-gray-500">
                   Thử đổi bộ lọc hoặc làm mới dữ liệu.
                 </div>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100">
-                {filteredRequests.map((request) => {
-                  const meta = statusMeta[request.status] || {
+              <div
+                onScroll={handleListScroll}
+                className="max-h-[calc(100vh-220px)] min-h-[420px] overflow-y-auto overscroll-contain"
+              >
+                <div className="divide-y divide-gray-100">
+                {visibleRequests.map((request) => {
+                  const statusKey = getStatusKey(request);
+                  const meta = statusMeta[statusKey] || {
                     label: request.status,
                     tone: "border-gray-200 bg-gray-50 text-gray-700",
                     dot: "bg-gray-400",
                   };
+                  const isAvailability = request.kind === "availability";
                   const requesterShift = shiftSummary(request, "requester");
                   const targetShift = shiftSummary(request, "target");
-                  const canCancel = request.status === "PENDING_TARGET";
-                  const canRevert = request.status === "APPROVED";
+                  const canCancel = !isAvailability && request.status === "PENDING_TARGET";
+                  const canRevert = !isAvailability && request.status === "APPROVED";
+                  const canRemind = isAvailability && request.status !== "APPROVED";
                   const canResolve = canCancel || canRevert;
                   const reason = reasonById[request.swap_request_id] || "";
-                  const isBusy = loadingId === request.swap_request_id;
+                  const isBusy = loadingId === request.swap_request_id || loadingId === request.request_key;
+                  const isDeleting = deletingId === request.request_key;
 
                   return (
-                    <article key={request.swap_request_id} className="p-4 transition hover:bg-gray-50">
+                    <article key={request.request_key} className="p-4 transition hover:bg-gray-50">
                       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
+                            {isAvailability && (
+                              <input
+                                type="checkbox"
+                                checked={selectedRequestKeys.includes(request.request_key)}
+                                onChange={() => toggleRequestSelection(request.request_key)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                                aria-label="Chọn yêu cầu lịch rảnh"
+                              />
+                            )}
                             <span
                               className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-bold ${meta.tone}`}
                             >
@@ -465,27 +766,61 @@ export default function ShiftSwapManagementPage() {
                               {meta.label}
                             </span>
                             <span className="text-xs font-bold uppercase text-gray-400">
-                              #{request.swap_request_id}
+                              #{isAvailability ? request.id : request.swap_request_id}
+                            </span>
+                            <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold uppercase text-gray-600">
+                              {isAvailability ? "Lịch rảnh" : "Đổi ca"}
                             </span>
                             <span className="text-sm font-semibold text-gray-500">
                               {formatDateTime(request.created_at)}
                             </span>
+                            {canRemind && (
+                              <button
+                                type="button"
+                                onClick={() => remindAvailability(request)}
+                                disabled={isBusy}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-cyan-600 px-2.5 text-xs font-bold text-white transition hover:bg-cyan-700 disabled:opacity-60"
+                              >
+                                <BellAlertIcon className="h-4 w-4" />
+                                {isBusy ? "Đang gửi..." : "Nhắc nhở"}
+                              </button>
+                            )}
+                            {isAvailability && (
+                              <button
+                                type="button"
+                                onClick={() => deleteAvailability(request)}
+                                disabled={isDeleting}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                                {isDeleting ? "Đang xóa..." : "Xóa"}
+                              </button>
+                            )}
                           </div>
 
-                          <div className="mt-3 grid gap-3 md:grid-cols-2">
-                            <ShiftBlock
-                              title="Ca gửi"
-                              person={request.requester_employee_name}
-                              shift={requesterShift}
-                            />
-                            <ShiftBlock
-                              title="Ca nhận"
-                              person={request.target_employee_name}
-                              shift={targetShift}
-                            />
-                          </div>
+                          {isAvailability ? (
+                            <div className="mt-3">
+                              <AvailabilityBlock request={request} />
+                              <div className="mt-3 rounded-md bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-800">
+                                Trạng thái: {request.status === "APPROVED" ? "Nhân viên đã nhập lịch rảnh" : "Nhân viên chưa nhập lịch rảnh"}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                              <ShiftBlock
+                                title="Ca gửi"
+                                person={request.requester_employee_name}
+                                shift={requesterShift}
+                              />
+                              <ShiftBlock
+                                title="Ca nhận"
+                                person={request.target_employee_name}
+                                shift={targetShift}
+                              />
+                            </div>
+                          )}
 
-                          {(request.requester_note ||
+                          {!isAvailability && (request.requester_note ||
                             request.admin_cancel_reason ||
                             request.admin_revert_reason) && (
                             <div className="mt-3 grid gap-2 text-sm font-medium text-gray-700">
@@ -508,6 +843,7 @@ export default function ShiftSwapManagementPage() {
                           )}
                         </div>
 
+                        {!isAvailability && (
                         <div className="w-full shrink-0 xl:w-72">
                           {canResolve ? (
                             <div className="rounded-md border border-gray-200 bg-white p-3">
@@ -540,19 +876,33 @@ export default function ShiftSwapManagementPage() {
                                 ) : (
                                   <XCircleIcon className="h-5 w-5" />
                                 )}
-                                {isBusy ? "Đang xử lý..." : canRevert ? "Hoàn tác" : "Hủy request"}
+                                {isBusy ? "Đang xử lý..." : canRevert ? "Hoàn tác" : "Hủy yêu cầu"}
                               </button>
                             </div>
                           ) : (
                             <div className="flex min-h-24 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 text-center text-sm font-bold text-gray-500">
-                              Request đã được giải quyết
+                              Yêu cầu đã được giải quyết
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     </article>
                   );
                 })}
+                </div>
+
+                {visibleRequests.length < filteredRequests.length && (
+                  <div className="flex justify-center border-t border-gray-100 p-3">
+                    <button
+                      type="button"
+                      onClick={loadMoreRequests}
+                      className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm font-bold text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      Tải thêm yêu cầu
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>

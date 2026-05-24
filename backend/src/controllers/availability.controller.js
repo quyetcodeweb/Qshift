@@ -85,3 +85,39 @@ export const rejectRequest = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const listAvailabilityRequests = async (req, res) => {
+  try {
+    const requests = await service.listAvailabilityRequests();
+    res.json(requests);
+  } catch (err) {
+    console.error("List availability requests error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const remindAvailabilityRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await service.remindAvailabilityRequest(id);
+
+    res.json({ message: "Reminder sent" });
+  } catch (err) {
+    console.error("Remind availability request error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const deleteAvailabilityRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await service.deleteAvailabilityRequest(id);
+
+    res.json({ message: "Deleted" });
+  } catch (err) {
+    console.error("Delete availability request error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};

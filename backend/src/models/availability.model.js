@@ -104,12 +104,35 @@ export const createRequest = async (user_id, month, year, data) => {
   }
 };
 
+export const findPendingFillRequest = async (user_id, month, year) => {
+  const [rows] = await db.query(
+    `SELECT *
+     FROM availability_requests
+     WHERE user_id=?
+       AND month=?
+       AND year=?
+       AND (status='PENDING' OR status IS NULL)
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [user_id, month, year]
+  );
+
+  return rows[0] || null;
+};
+
+export const updateRequestDataAndStatus = async (id, data, status) => {
+  await db.query(
+    "UPDATE availability_requests SET data=?, status=? WHERE id=?",
+    [JSON.stringify(data), status, id]
+  );
+};
+
 export const getRequestById = async (id) => {
   try {
     const [rows] = await db.query(
       `SELECT ar.*, e.name as employee_name 
        FROM availability_requests ar
-       LEFT JOIN employees e ON ar.employee_id = e.employee_id
+       LEFT JOIN employees e ON ar.employee_id = e.employee_id OR ar.user_id = e.user_id
        WHERE ar.id=?`,
       [id]
     );
@@ -158,17 +181,96 @@ export const createNotification = async (
   );
 };
 
-export const createFillRequests = async (month, year) => {
+export const listRequests = async () => {
+  const [rows] = await db.query(
+    `SELECT
+       ar.id,
+       ar.user_id,
+       ar.employee_id,
+       ar.month,
+       ar.year,
+       ar.data,
+       COALESCE(ar.status, 'PENDING') as status,
+       ar.created_at,
+       e.name as employee_name,
+       e.employee_id as employee_code,
+       COALESCE(e.email, u.username) as email,
+       CASE
+         WHEN ar.status = 'APPROVED' THEN 1
+         ELSE 0
+       END as has_submitted
+     FROM availability_requests ar
+     LEFT JOIN employees e ON ar.employee_id = e.employee_id OR ar.user_id = e.user_id
+     LEFT JOIN users u ON ar.user_id = u.user_id
+     ORDER BY ar.created_at DESC, ar.id DESC`
+  );
+
+  return rows;
+};
+
+export const deleteRequest = async (id) => {
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    await conn.query(
+      `DELETE FROM notifications
+       WHERE ref_id=?
+       AND type IN (
+         'AVAILABILITY_FILL_REQUEST',
+         'AVAILABILITY_FILL_REMINDER',
+         'AVAILABILITY_SUBMITTED',
+         'AVAILABILITY_REJECTED'
+       )`,
+      [id]
+    );
+
+    const [result] = await conn.query(
+      "DELETE FROM availability_requests WHERE id=?",
+      [id]
+    );
+
+    await conn.commit();
+    return result.affectedRows || 0;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
+export const createFillRequests = async (month, year, employeeId = null) => {
+  const params = [];
+  let employeeFilter = "";
+
+  if (employeeId) {
+    employeeFilter = " AND e.employee_id = ?";
+    params.push(employeeId);
+  }
+
   const [employees] = await db.query(
     `SELECT u.user_id, e.employee_id
      FROM users u
      JOIN employees e ON e.user_id = u.user_id
-     WHERE u.role='EMPLOYEE' AND u.status = 1`
+     WHERE u.role='EMPLOYEE' AND u.status = 1${employeeFilter}`,
+    params
   );
 
   const requests = [];
 
   for (const employee of employees) {
+    const existing = await findPendingFillRequest(employee.user_id, month, year);
+    if (existing) {
+      requests.push({
+        request_id: existing.id,
+        user_id: employee.user_id,
+        employee_id: employee.employee_id,
+      });
+      continue;
+    }
+
     const [availability] = await db.query(
       `SELECT DATE_FORMAT(work_date, '%Y-%m-%d') as date, shift_id
        FROM employee_availability

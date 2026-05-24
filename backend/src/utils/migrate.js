@@ -141,18 +141,6 @@ export const runMigrations = async () => {
       console.log("✅ Database schema is up to date");
     }
 
-    // Fix: Set all PENDING to NULL
-    try {
-      const [result] = await db.query(
-        `UPDATE availability_requests SET status = NULL WHERE status = 'PENDING'`
-      );
-      if (result.changedRows > 0) {
-        console.log(`✅ Fixed ${result.changedRows} PENDING requests to NULL`);
-      }
-    } catch (e) {
-      console.warn("⚠️ Could not update status:", e.message);
-    }
-
     // Check if roles table exists
     if (!(await tableExists("roles"))) {
       console.log("⏳ Running migration: Create roles table...");

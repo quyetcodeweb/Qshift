@@ -24,13 +24,17 @@ async function ensureLateRequestTable() {
 
 export const sendAvailabilityRequest = async (req, res) => {
   try {
-    const { month, year } = req.body;
+    const { month, year, employee_id } = req.body;
 
     if (!month || !year) {
       return res.status(400).json({ message: "month and year are required" });
     }
 
-    const count = await sendFillRequestToEmployees(Number(month), Number(year));
+    const count = await sendFillRequestToEmployees(
+      Number(month),
+      Number(year),
+      employee_id ? Number(employee_id) : null,
+    );
 
     res.json({ message: "Sent request", count });
   } catch (err) {

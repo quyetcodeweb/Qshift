@@ -26,8 +26,14 @@ export const requestAvailability = async (user_id, month, year, data) => {
     year,
   });
 
-  const requestId = await model.createRequest(user_id, month, year, data);
-  await model.updateRequestStatus(requestId, "APPROVED");
+  const pendingRequest = await model.findPendingFillRequest(user_id, month, year);
+  const requestId = pendingRequest?.id || await model.createRequest(user_id, month, year, data);
+
+  if (pendingRequest) {
+    await model.updateRequestDataAndStatus(pendingRequest.id, data, "APPROVED");
+  } else {
+    await model.updateRequestStatus(requestId, "APPROVED");
+  }
 
   const admins = await model.getAdmins();
 
@@ -41,8 +47,8 @@ export const requestAvailability = async (user_id, month, year, data) => {
   }
 };
 
-export const sendFillRequestToEmployees = async (month, year) => {
-  const requests = await model.createFillRequests(month, year);
+export const sendFillRequestToEmployees = async (month, year, employeeId = null) => {
+  const requests = await model.createFillRequests(month, year, employeeId);
 
   for (const request of requests) {
     await model.createNotification(
@@ -54,6 +60,31 @@ export const sendFillRequestToEmployees = async (month, year) => {
   }
 
   return requests.length;
+};
+
+export const listAvailabilityRequests = async () => {
+  return await model.listRequests();
+};
+
+export const remindAvailabilityRequest = async (id) => {
+  const request = await model.getRequestById(id);
+  if (!request) throw new Error("Request not found");
+
+  if (request.status === "APPROVED") {
+    throw new Error("Nhân viên này đã nhập lịch rảnh");
+  }
+
+  await model.createNotification(
+    request.user_id,
+    `Nhắc nhở: vui lòng nhập lịch rảnh tháng ${request.month}/${request.year}`,
+    "AVAILABILITY_FILL_REMINDER",
+    id
+  );
+};
+
+export const deleteAvailabilityRequest = async (id) => {
+  const deleted = await model.deleteRequest(id);
+  if (!deleted) throw new Error("Request not found");
 };
 
 export const approveRequest = async (id) => {

@@ -21,6 +21,7 @@ import {
   MagnifyingGlassIcon,
   PaperAirplaneIcon,
   QuestionMarkCircleIcon,
+  UserGroupIcon,
   UserCircleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -302,14 +303,27 @@ export default function AvailabilityPage() {
     }
   };
 
-  const sendFillRequest = async () => {
+  const sendFillRequest = async (target = "selected") => {
     try {
+      if (target === "selected" && !employeeId) {
+        alert("Vui lòng chọn nhân viên cần gửi yêu cầu");
+        return;
+      }
+
       const res = await axios.post(
         `${API_URL}/notifications/send`,
-        { month, year },
+        {
+          month,
+          year,
+          ...(target === "selected" ? { employee_id: Number(employeeId) } : {}),
+        },
         { headers: authHeaders() },
       );
-      alert(`Đã gửi yêu cầu cho ${res.data.count || 0} nhân viên!`);
+      alert(
+        target === "selected"
+          ? `Đã gửi yêu cầu cho ${selectedEmployee?.name || "nhân viên đã chọn"}!`
+          : `Đã gửi yêu cầu cho ${res.data.count || 0} nhân viên!`,
+      );
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.message || "Không thể gửi yêu cầu!");
@@ -520,14 +534,24 @@ export default function AvailabilityPage() {
             </div>
 
             {isAdmin && (
-              <Button
-                variant="outlined"
-                onClick={sendFillRequest}
-                className="flex w-full items-center justify-center gap-2 rounded-md border-blue-200 normal-case text-blue-700"
-              >
-                <PaperAirplaneIcon className="h-5 w-5" />
-                Gửi yêu cầu nhân viên
-              </Button>
+              <div className="grid gap-2">
+                <Button
+                  variant="outlined"
+                  onClick={() => sendFillRequest("selected")}
+                  disabled={!employeeId}
+                  className="flex w-full items-center justify-center gap-2 rounded-md border-blue-200 normal-case text-blue-700 disabled:opacity-50"
+                >
+                  <PaperAirplaneIcon className="h-5 w-5" />
+                  Gửi yêu cầu nhân viên đang chọn
+                </Button>
+                <Button
+                  onClick={() => sendFillRequest("all")}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 normal-case text-white"
+                >
+                  <UserGroupIcon className="h-5 w-5" />
+                  Gửi yêu cầu tất cả nhân viên
+                </Button>
+              </div>
             )}
           </div>
         </Card>
