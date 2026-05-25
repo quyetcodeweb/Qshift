@@ -23,8 +23,8 @@ function getShiftBounds(schedule) {
 async function getTodaySchedulesForEmployee(employeeId) {
   const [schedules] = await database.query(
     `SELECT
-      s.schedule_id,
-      s.employee_id,
+      CAST(s.schedule_id AS CHAR) AS schedule_id,
+      CAST(s.employee_id AS CHAR) AS employee_id,
       e.name AS employee_name,
       DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
       sh.shift_name,
@@ -216,35 +216,78 @@ export async function scanMissingAttendanceNotifications() {
   }
 }
 
-function buildAttendanceSelect(extraWhere = "") {
-  return `
-    SELECT
-      s.schedule_id,
-      s.employee_id,
+async function getAttendanceRecords(extraWhere = "", params = [], orderBy = "") {
+  const [schedules] = await database.query(
+    `SELECT
+      CAST(s.schedule_id AS CHAR) AS schedule_id,
+      CAST(s.employee_id AS CHAR) AS employee_id,
       e.name AS employee_name,
       e.email,
-      s.shift_id,
+      CAST(s.shift_id AS CHAR) AS shift_id
+     FROM schedules s
+     JOIN employees e ON s.employee_id = e.employee_id
+     JOIN shifts sh ON s.shift_id = sh.shift_id
+     WHERE s.status = 'PUBLISHED'
+       ${extraWhere}
+     ${orderBy}`,
+    params
+  );
+
+  if (!schedules.length) return [];
+
+  const scheduleIds = schedules.map((schedule) => schedule.schedule_id);
+  const placeholders = scheduleIds.map(() => "?").join(",");
+  const [shiftRows] = await database.query(
+    `SELECT
+      CAST(s.schedule_id AS CHAR) AS schedule_id,
       sh.shift_name,
       TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
       TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time,
       DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
-      s.status AS schedule_status,
-      a.attendance_id,
-      DATE_FORMAT(a.check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
-      DATE_FORMAT(a.check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
-      a.status AS attendance_status,
-      CASE
-        WHEN a.check_in IS NULL THEN 'NOT_CHECKED_IN'
-        WHEN a.check_out IS NULL THEN 'CHECKED_IN'
-        ELSE 'COMPLETED'
-      END AS progress_status
-    FROM schedules s
-    JOIN employees e ON s.employee_id = e.employee_id
-    JOIN shifts sh ON s.shift_id = sh.shift_id
-    LEFT JOIN attendance a ON a.schedule_id = s.schedule_id
-    WHERE s.status = 'PUBLISHED'
-      ${extraWhere}
-  `;
+      s.status AS schedule_status
+     FROM schedules s
+     JOIN shifts sh ON s.shift_id = sh.shift_id
+     WHERE s.schedule_id IN (${placeholders})`,
+    scheduleIds
+  );
+  const [attendanceRows] = await database.query(
+    `SELECT
+      CAST(schedule_id AS CHAR) AS schedule_id,
+      CAST(attendance_id AS CHAR) AS attendance_id,
+      DATE_FORMAT(check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
+      DATE_FORMAT(check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
+      status AS attendance_status
+     FROM attendance
+     WHERE schedule_id IN (${placeholders})`,
+    scheduleIds
+  );
+
+  const shiftByScheduleId = new Map(
+    shiftRows.map((row) => [row.schedule_id, row])
+  );
+  const attendanceByScheduleId = new Map(
+    attendanceRows.map((row) => [row.schedule_id, row])
+  );
+
+  return schedules.map((schedule) => {
+    const shift = shiftByScheduleId.get(schedule.schedule_id) || {};
+    const attendance = attendanceByScheduleId.get(schedule.schedule_id) || {};
+    const progressStatus = !attendance.check_in
+      ? "NOT_CHECKED_IN"
+      : !attendance.check_out
+        ? "CHECKED_IN"
+        : "COMPLETED";
+
+    return {
+      ...schedule,
+      ...shift,
+      attendance_id: attendance.attendance_id || null,
+      check_in: attendance.check_in || null,
+      check_out: attendance.check_out || null,
+      attendance_status: attendance.attendance_status || null,
+      progress_status: progressStatus,
+    };
+  });
 }
 
 export async function getTodayAttendance(req, res) {
@@ -272,10 +315,10 @@ export async function getTodayAttendance(req, res) {
       params.push(employee.employee_id);
     }
 
-    const [rows] = await database.query(
-      `${buildAttendanceSelect(where)}
-       ORDER BY sh.start_time ASC, e.name ASC`,
-      params
+    const rows = await getAttendanceRecords(
+      where,
+      params,
+      "ORDER BY sh.start_time ASC, e.name ASC"
     );
 
     res.json(rows);
@@ -321,10 +364,10 @@ export async function getAttendanceHistory(req, res) {
       params.push(employee.employee_id);
     }
 
-    const [records] = await database.query(
-      `${buildAttendanceSelect(where)}
-       ORDER BY s.work_date DESC, sh.start_time DESC`,
-      params
+    const records = await getAttendanceRecords(
+      where,
+      params,
+      "ORDER BY s.work_date DESC, sh.start_time DESC"
     );
 
     const stats = records.reduce(
