@@ -6,7 +6,6 @@ import {
   AccordionHeader,
   Button,
   Card,
-  Input,
   List,
   ListItem,
   ListItemPrefix,
@@ -26,16 +25,51 @@ import {
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
-import { getRole, logout } from "../utils/auth";
+import { getRole, getUser, logout } from "../utils/auth";
+
+function roleLabel(role) {
+  return role === "ADMIN" ? "Admin" : "Nhân viên";
+}
+
+function getStoredUser() {
+  try {
+    return getUser() || {};
+  } catch {
+    return {};
+  }
+}
+
+function UserAvatar({ user, profile }) {
+  const name = profile?.name || user?.employee_name || user?.username || "Q";
+  const avatarUrl = profile?.avatar_url || user?.avatar_url;
+  const initial = String(name).trim().charAt(0).toUpperCase() || "Q";
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="h-11 w-11 rounded-full border border-gray-200 object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+      {initial}
+    </div>
+  );
+}
 
 export default function Sidebar() {
   const location = useLocation();
   const [open, setOpen] = React.useState(0);
   const [count, setCount] = React.useState(0);
   const role = getRole();
+  const user = getStoredUser();
+  const [profile, setProfile] = React.useState(null);
   const [availabilityAccess, setAvailabilityAccess] = React.useState(() => {
     try {
       return JSON.parse(localStorage.getItem("availabilityFillRequest"));
@@ -94,10 +128,25 @@ export default function Sidebar() {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (role !== "EMPLOYEE") return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    axios
+      .get(`${API_URL}/employees/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setProfile(res.data || null))
+      .catch(() => setProfile(null));
+  }, [role]);
+
   const baseItem =
     "py-2 px-1 text-sm font-medium transition-all duration-200 flex items-center gap-1";
   const hoverItem = "hover:bg-gray-100";
   const activeItem = "text-blue-600 bg-blue-50 border-l-4 border-blue-500";
+  const displayName = profile?.name || user?.employee_name || user?.username || "QShift user";
 
   return (
     <Card className="flex h-screen w-64 min-w-[256px] max-w-[256px] flex-col justify-between p-4 shadow-xl">
@@ -119,12 +168,14 @@ export default function Sidebar() {
           </Link>
         </div>
 
-        <div className="mb-4">
-          <Input
-            icon={<MagnifyingGlassIcon className="h-4 w-4" />}
-            label="Search"
-            className="text-sm"
-          />
+        <div className="mb-5 flex items-center gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <UserAvatar user={user} profile={profile} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-gray-900">{displayName}</p>
+            <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+              {roleLabel(role)}
+            </p>
+          </div>
         </div>
 
         <List className="text-sm text-gray-700">
