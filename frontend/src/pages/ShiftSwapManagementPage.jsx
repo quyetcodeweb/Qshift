@@ -71,8 +71,56 @@ const statusMeta = {
     count: "bg-emerald-100 text-emerald-800",
     group: "resolved",
   },
+  AVAILABILITY_SUBMITTED: {
+    label: "Đã nhập lịch rảnh",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    dot: "bg-emerald-500",
+    active: "border-emerald-300 bg-emerald-50 text-emerald-800",
+    count: "bg-emerald-100 text-emerald-800",
+    group: "resolved",
+  },
+  AVAILABILITY_EDIT_PENDING: {
+    label: "Chờ duyệt sửa",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+    dot: "bg-amber-500",
+    active: "border-amber-300 bg-amber-50 text-amber-800",
+    count: "bg-amber-100 text-amber-800",
+    group: "unresolved",
+  },
+  AVAILABILITY_EDIT_APPROVED: {
+    label: "Đã duyệt sửa",
+    tone: "border-cyan-200 bg-cyan-50 text-cyan-800",
+    dot: "bg-cyan-500",
+    active: "border-cyan-300 bg-cyan-50 text-cyan-800",
+    count: "bg-cyan-100 text-cyan-800",
+    group: "unresolved",
+  },
   AVAILABILITY_REJECTED: {
     label: "Lịch rảnh bị từ chối",
+    tone: "border-red-200 bg-red-50 text-red-800",
+    dot: "bg-red-500",
+    active: "border-red-300 bg-red-50 text-red-800",
+    count: "bg-red-100 text-red-800",
+    group: "resolved",
+  },
+  PAYROLL_PENDING: {
+    label: "Chờ phản hồi lương",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    dot: "bg-emerald-500",
+    active: "border-emerald-300 bg-emerald-50 text-emerald-800",
+    count: "bg-emerald-100 text-emerald-800",
+    group: "unresolved",
+  },
+  PAYROLL_ANSWERED: {
+    label: "Đã trả lời lương",
+    tone: "border-blue-200 bg-blue-50 text-blue-800",
+    dot: "bg-blue-500",
+    active: "border-blue-300 bg-blue-50 text-blue-800",
+    count: "bg-blue-100 text-blue-800",
+    group: "resolved",
+  },
+  PAYROLL_REJECTED: {
+    label: "Đã từ chối phản hồi lương",
     tone: "border-red-200 bg-red-50 text-red-800",
     dot: "bg-red-500",
     active: "border-red-300 bg-red-50 text-red-800",
@@ -136,6 +184,7 @@ function shiftSummary(request, owner) {
 function requestSearchText(request) {
   return [
     request.kind === "availability" ? "lịch rảnh yêu cầu nhập lịch rảnh" : "đổi ca",
+    request.kind === "payroll" ? "phản hồi lương" : "",
     request.employee_name,
     request.employee_code,
     request.email,
@@ -150,6 +199,9 @@ function requestSearchText(request) {
     request.requester_note,
     request.admin_cancel_reason,
     request.admin_revert_reason,
+    request.subject,
+    request.content,
+    request.admin_reply,
     statusMeta[getStatusKey(request)]?.label,
   ]
     .filter(Boolean)
@@ -160,6 +212,9 @@ function requestSearchText(request) {
 function getStatusKey(request) {
   if (request.kind === "availability") {
     return `AVAILABILITY_${request.status || "PENDING"}`;
+  }
+  if (request.kind === "payroll") {
+    return `PAYROLL_${request.status || "PENDING"}`;
   }
 
   return request.status;
@@ -187,6 +242,14 @@ function normalizeSwapRequests(data) {
     ...request,
     kind: "swap",
     request_key: `swap-${request.swap_request_id}`,
+  }));
+}
+
+function normalizePayrollFeedback(data) {
+  return normalizeRequests(data).map((request) => ({
+    ...request,
+    kind: "payroll",
+    request_key: `payroll-${request.feedback_id}`,
   }));
 }
 
@@ -257,6 +320,7 @@ function AvailabilityBlock({ request }) {
 export default function ShiftSwapManagementPage() {
   const [requests, setRequests] = useState([]);
   const [reasonById, setReasonById] = useState({});
+  const [payrollReplyById, setPayrollReplyById] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -274,17 +338,21 @@ export default function ShiftSwapManagementPage() {
     setError("");
     setLoading(true);
     try {
-      const [swapRes, availabilityRes] = await Promise.all([
+      const [swapRes, availabilityRes, payrollFeedbackRes] = await Promise.all([
         axios.get(`${API_URL}/shift-swaps`, {
           headers: authHeaders(),
         }),
         axios.get(`${API_URL}/availability/requests/all`, {
           headers: authHeaders(),
         }),
+        axios.get(`${API_URL}/payroll/feedback`, {
+          headers: authHeaders(),
+        }),
       ]);
 
       setRequests([
         ...normalizeAvailabilityRequests(availabilityRes.data),
+        ...normalizePayrollFeedback(payrollFeedbackRes.data),
         ...normalizeSwapRequests(swapRes.data),
       ].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)));
     } catch (err) {
@@ -469,6 +537,54 @@ export default function ShiftSwapManagementPage() {
     }
   };
 
+  const respondAvailabilityEdit = async (request, action) => {
+    try {
+      setLoadingId(request.request_key);
+      await axios.post(
+        `${API_URL}/availability/request/edit/${request.id}/respond`,
+        { action },
+        { headers: authHeaders() },
+      );
+      await fetchRequests();
+      window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: action === "approve" ? "Đã duyệt yêu cầu sửa" : "Đã từ chối yêu cầu sửa",
+        message: "Yêu cầu sửa lịch rảnh đã được cập nhật.",
+      });
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể xử lý yêu cầu sửa lịch rảnh");
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const respondPayrollFeedback = async (request, action) => {
+    try {
+      const reply = payrollReplyById[request.feedback_id] || "";
+      setLoadingId(request.request_key);
+
+      await axios.post(
+        `${API_URL}/payroll/feedback/${request.feedback_id}/respond`,
+        { action, reply },
+        { headers: authHeaders() },
+      );
+
+      setPayrollReplyById((prev) => ({ ...prev, [request.feedback_id]: "" }));
+      await fetchRequests();
+      window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: action === "reject" ? "Đã từ chối phản hồi" : "Đã trả lời phản hồi",
+        message: "Phản hồi lương đã được cập nhật.",
+      });
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể xử lý phản hồi lương");
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
   const deleteAvailability = async (request) => {
     const employeeName = request.employee_name || request.email || `User #${request.user_id}`;
     const confirmed = await window.appConfirm?.({
@@ -634,17 +750,24 @@ export default function ShiftSwapManagementPage() {
             <label className="mt-4 block text-xs font-bold uppercase text-gray-500">
               Loại yêu cầu
             </label>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="mt-2 h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-600"
-            >
+            <div className="mt-2 max-h-56 overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white p-2 lg:max-h-64">
               {statusOptions.map((item) => (
-                <option key={item.value} value={item.value}>
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setStatusFilter(item.value)}
+                  className={`mb-1 flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm font-bold transition last:mb-0 ${
+                    statusFilter === item.value
+                      ? "bg-blue-50 text-blue-700 ring-1 ring-blue-100"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">
                   {item.label}
-                </option>
+                  </span>
+                </button>
               ))}
-            </select>
+            </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <label className="col-span-2 block text-xs font-bold uppercase text-gray-500">
@@ -758,11 +881,18 @@ export default function ShiftSwapManagementPage() {
                     dot: "bg-gray-400",
                   };
                   const isAvailability = request.kind === "availability";
+                  const isPayroll = request.kind === "payroll";
+                  const isSwap = request.kind === "swap";
                   const requesterShift = shiftSummary(request, "requester");
                   const targetShift = shiftSummary(request, "target");
-                  const canCancel = !isAvailability && request.status === "PENDING_TARGET";
-                  const canRevert = !isAvailability && request.status === "APPROVED";
-                  const canRemind = isAvailability && request.status !== "APPROVED";
+                  const canCancel = isSwap && request.status === "PENDING_TARGET";
+                  const canRevert = isSwap && request.status === "APPROVED";
+                  const canRemind =
+                    isAvailability &&
+                    !Number(request.has_submitted) &&
+                    ["PENDING", null, undefined].includes(request.status);
+                  const canRespondAvailabilityEdit = isAvailability && request.status === "EDIT_PENDING";
+                  const canRespondPayroll = isPayroll && request.status === "PENDING";
                   const canResolve = canCancel || canRevert;
                   const reason = reasonById[request.swap_request_id] || "";
                   const isBusy = loadingId === request.swap_request_id || loadingId === request.request_key;
@@ -789,10 +919,10 @@ export default function ShiftSwapManagementPage() {
                               {meta.label}
                             </span>
                             <span className="text-xs font-bold uppercase text-gray-400">
-                              #{isAvailability ? request.id : request.swap_request_id}
+                              #{isAvailability ? request.id : isPayroll ? request.feedback_id : request.swap_request_id}
                             </span>
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold uppercase text-gray-600">
-                              {isAvailability ? "Lịch rảnh" : "Đổi ca"}
+                              {isAvailability ? "Lịch rảnh" : isPayroll ? "Lương" : "Đổi ca"}
                             </span>
                             <span className="text-sm font-semibold text-gray-500">
                               {formatDateTime(request.created_at)}
@@ -828,6 +958,21 @@ export default function ShiftSwapManagementPage() {
                                 Trạng thái: {request.status === "APPROVED" ? "Nhân viên đã nhập lịch rảnh" : "Nhân viên chưa nhập lịch rảnh"}
                               </div>
                             </div>
+                          ) : isPayroll ? (
+                            <div className="mt-3 grid gap-2 text-sm font-medium text-gray-700">
+                              <div className="rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-900">
+                                <div className="text-xs font-bold uppercase text-emerald-600">
+                                  {request.employee_name || request.email || "Nhân viên"}
+                                </div>
+                                <div className="mt-1 text-base font-bold">{request.subject}</div>
+                                <div className="mt-2 whitespace-pre-wrap leading-6">{request.content}</div>
+                              </div>
+                              {request.admin_reply && (
+                                <div className="rounded-md bg-blue-50 px-3 py-2 text-blue-800">
+                                  Phản hồi admin: {request.admin_reply}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <div className="mt-3 grid gap-3 md:grid-cols-2">
                               <ShiftBlock
@@ -843,7 +988,7 @@ export default function ShiftSwapManagementPage() {
                             </div>
                           )}
 
-                          {!isAvailability && (request.requester_note ||
+                          {isSwap && (request.requester_note ||
                             request.admin_cancel_reason ||
                             request.admin_revert_reason) && (
                             <div className="mt-3 grid gap-2 text-sm font-medium text-gray-700">
@@ -866,7 +1011,85 @@ export default function ShiftSwapManagementPage() {
                           )}
                         </div>
 
-                        {!isAvailability && (
+                        {isAvailability && canRespondAvailabilityEdit && (
+                          <div className="w-full shrink-0 xl:w-72">
+                            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                              <div className="text-sm font-bold text-amber-900">
+                                Nhân viên xin phép sửa lịch rảnh.
+                              </div>
+                              <div className="mt-3 grid gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => respondAvailabilityEdit(request, "approve")}
+                                  disabled={isBusy}
+                                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                >
+                                  <CheckCircleIcon className="h-5 w-5" />
+                                  {isBusy ? "Đang xử lý..." : "Duyệt sửa"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => respondAvailabilityEdit(request, "reject")}
+                                  disabled={isBusy}
+                                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-red-600 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+                                >
+                                  <XCircleIcon className="h-5 w-5" />
+                                  {isBusy ? "Đang xử lý..." : "Từ chối"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {isPayroll && (
+                          <div className="w-full shrink-0 xl:w-72">
+                            {canRespondPayroll ? (
+                              <div className="rounded-md border border-emerald-200 bg-white p-3">
+                                <label className="text-xs font-bold uppercase text-gray-500">
+                                  Nội dung trả lời
+                                </label>
+                                <textarea
+                                  value={payrollReplyById[request.feedback_id] || ""}
+                                  onChange={(event) =>
+                                    setPayrollReplyById((prev) => ({
+                                      ...prev,
+                                      [request.feedback_id]: event.target.value,
+                                    }))
+                                  }
+                                  rows={4}
+                                  className="mt-2 w-full resize-none rounded-md border border-gray-300 p-2 text-sm font-medium text-gray-900 outline-none transition focus:border-emerald-600"
+                                  placeholder="Nhập nội dung trả lời..."
+                                />
+                                <div className="mt-2 grid gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => respondPayrollFeedback(request, "reply")}
+                                    disabled={isBusy}
+                                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                  >
+                                    <CheckCircleIcon className="h-5 w-5" />
+                                    {isBusy ? "Đang xử lý..." : "Trả lời"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => respondPayrollFeedback(request, "reject")}
+                                    disabled={isBusy}
+                                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-red-600 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+                                  >
+                                    <XCircleIcon className="h-5 w-5" />
+                                    {isBusy ? "Đang xử lý..." : "Từ chối"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex min-h-24 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 text-center text-sm font-bold text-gray-500">
+                                Phản hồi lương đã được xử lý
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {isSwap && (
                         <div className="w-full shrink-0 xl:w-72">
                           {canResolve ? (
                             <div className="rounded-md border border-gray-200 bg-white p-3">

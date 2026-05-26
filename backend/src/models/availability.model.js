@@ -120,10 +120,104 @@ export const findPendingFillRequest = async (user_id, month, year) => {
   return rows[0] || null;
 };
 
+export const findLatestRequest = async (user_id, month, year) => {
+  const [rows] = await db.query(
+    `SELECT *
+     FROM availability_requests
+     WHERE user_id=?
+       AND month=?
+       AND year=?
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [user_id, month, year]
+  );
+
+  return rows[0] || null;
+};
+
 export const updateRequestDataAndStatus = async (id, data, status) => {
   await db.query(
-    "UPDATE availability_requests SET data=?, status=? WHERE id=?",
-    [JSON.stringify(data), status, id]
+    `UPDATE availability_requests
+     SET data=?,
+         status=?,
+         submitted_at=CASE WHEN ? IN ('SUBMITTED','APPROVED') THEN NOW() ELSE submitted_at END
+     WHERE id=?`,
+    [JSON.stringify(data), status, status, id]
+  );
+};
+
+export const markEditRequested = async (id) => {
+  await db.query(
+    `UPDATE availability_requests
+     SET status='EDIT_PENDING', edit_requested_at=NOW()
+     WHERE id=?`,
+    [id]
+  );
+};
+
+export const markEditApproved = async (id) => {
+  await db.query(
+    `UPDATE availability_requests
+     SET status='EDIT_APPROVED', edit_approved_at=NOW()
+     WHERE id=?`,
+    [id]
+  );
+};
+
+export const markEditRejected = async (id) => {
+  await db.query(
+    `UPDATE availability_requests
+     SET status='SUBMITTED'
+     WHERE id=?`,
+    [id]
+  );
+};
+
+export const isWithinEditWindow = async (id) => {
+  const [rows] = await db.query(
+    `SELECT
+       CASE
+         WHEN submitted_at IS NOT NULL
+          AND submitted_at >= DATE_SUB(NOW(), INTERVAL 5 HOUR)
+         THEN 1
+         ELSE 0
+       END as is_within_window
+     FROM availability_requests
+     WHERE id=?
+     LIMIT 1`,
+    [id]
+  );
+
+  return Number(rows[0]?.is_within_window) === 1;
+};
+
+export const hasRecentNotification = async (user_id, type, ref_id) => {
+  const [rows] = await db.query(
+    `SELECT notification_id
+     FROM notifications
+     WHERE user_id=?
+       AND type=?
+       AND ref_id=?
+     LIMIT 1`,
+    [user_id, type, ref_id]
+  );
+
+  return rows.length > 0;
+};
+
+export const deleteNotificationsByType = async (ref_id, types) => {
+  if (!Array.isArray(types) || types.length === 0) return;
+  const placeholders = types.map(() => "?").join(",");
+  await db.query(
+    `DELETE FROM notifications WHERE ref_id=? AND type IN (${placeholders})`,
+    [ref_id, ...types]
+  );
+};
+
+export const updateRequestStatus = async (id, status) => {
+  await db.query(
+    "UPDATE availability_requests SET status=? WHERE id=?",
+    [status, id]
   );
 };
 
@@ -146,13 +240,6 @@ export const getRequestById = async (id) => {
     );
     return rows[0];
   }
-};
-
-export const updateRequestStatus = async (id, status) => {
-  await db.query(
-    "UPDATE availability_requests SET status=? WHERE id=?",
-    [status, id]
-  );
 };
 
 // ================= USER =================
@@ -181,6 +268,19 @@ export const createNotification = async (
   );
 };
 
+export const createNotificationOnce = async (
+  user_id,
+  message,
+  type = null,
+  ref_id = null
+) => {
+  if (type && ref_id && await hasRecentNotification(user_id, type, ref_id)) {
+    return;
+  }
+
+  await createNotification(user_id, message, type, ref_id);
+};
+
 export const listRequests = async () => {
   const [rows] = await db.query(
     `SELECT
@@ -196,7 +296,7 @@ export const listRequests = async () => {
        e.employee_id as employee_code,
        COALESCE(e.email, u.username) as email,
        CASE
-         WHEN ar.status = 'APPROVED' THEN 1
+         WHEN ar.status IN ('APPROVED', 'SUBMITTED', 'EDIT_PENDING', 'EDIT_APPROVED') THEN 1
          ELSE 0
        END as has_submitted
      FROM availability_requests ar

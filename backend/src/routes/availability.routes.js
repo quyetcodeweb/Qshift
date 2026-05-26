@@ -3,6 +3,9 @@ import {
   saveAvailability,
   getAvailability,
   requestAvailability,
+  getMyAvailabilityRequest,
+  requestEditAvailability,
+  respondEditAvailability,
   approveRequest,
   rejectRequest,
   listAvailabilityRequests,
@@ -17,6 +20,9 @@ router.post("/", saveAvailability);
 router.get("/requests/all", verifyToken, listAvailabilityRequests);
 router.post("/requests/:id/remind", verifyToken, remindAvailabilityRequest);
 router.delete("/requests/:id", verifyToken, deleteAvailabilityRequest);
+router.get("/request/me", verifyToken, getMyAvailabilityRequest);
+router.post("/request/edit", verifyToken, requestEditAvailability);
+router.post("/request/edit/:id/respond", verifyToken, respondEditAvailability);
 router.get("/:employee_id", getAvailability);
 router.post("/request", verifyToken, requestAvailability);
 router.post("/approve/:id", verifyToken, approveRequest);

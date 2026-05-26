@@ -85,11 +85,18 @@ export default function AddShiftModal({
           onChange={(e) => handleChange("work_date", e.target.value)}
         />
       </DialogBody>
-      <DialogFooter>
-        <Button variant="text" color="red" onClick={onClose} className="mr-1">
+      <DialogFooter className="gap-2">
+        <Button
+          variant="text"
+          onClick={onClose}
+          className="rounded-md bg-red-400 normal-case text-white"
+        >
           Hủy
         </Button>
-        <Button color="green" onClick={handleSubmit}>
+        <Button
+          onClick={handleSubmit}
+          className="rounded-md bg-light-green-400 normal-case text-white"
+        >
           Thêm
         </Button>
       </DialogFooter>

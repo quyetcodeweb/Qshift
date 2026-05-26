@@ -885,8 +885,9 @@ export default function EmployeePage() {
           setEditingEmployee(null);
         }}
         size="lg"
+        className="flex max-h-[92dvh] flex-col overflow-hidden"
       >
-        <DialogHeader className="border-b border-gray-100">
+        <DialogHeader className="shrink-0 border-b border-gray-100">
           <div>
             <Typography variant="h5" className="font-bold text-gray-950">
               {editingEmployee ? "Sửa nhân viên" : "Thêm nhân viên"}
@@ -898,7 +899,7 @@ export default function EmployeePage() {
             </Typography>
           </div>
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
               label="Tên nhân viên"
@@ -1019,7 +1020,7 @@ export default function EmployeePage() {
             </div>
           )}
         </DialogBody>
-        <DialogFooter className="gap-2 border-t border-gray-100">
+        <DialogFooter className="shrink-0 gap-2 border-t border-gray-100 bg-white px-4 py-3">
           <Button
             variant="text"
             onClick={() => {

@@ -110,6 +110,9 @@ function requestStatusLabel(status) {
     REJECTED: ["Đã từ chối", "bg-red-50 text-red-700 ring-red-100"],
     PENDING: ["Đang chờ", "bg-amber-50 text-amber-700 ring-amber-100"],
     PENDING_TARGET: ["Chờ nhân viên", "bg-amber-50 text-amber-700 ring-amber-100"],
+    SUBMITTED: ["Đã lưu", "bg-cyan-50 text-cyan-700 ring-cyan-100"],
+    EDIT_PENDING: ["Chờ duyệt sửa", "bg-amber-50 text-amber-700 ring-amber-100"],
+    EDIT_APPROVED: ["Đã duyệt sửa", "bg-emerald-50 text-emerald-700 ring-emerald-100"],
   };
   const item = map[status] || ["Đang chờ", "bg-slate-50 text-slate-700 ring-slate-100"];
   return { label: item[0], className: item[1] };
@@ -163,6 +166,13 @@ export default function NotificationPage() {
   const unreadCount = useMemo(
     () => data.filter((item) => !item.is_read).length,
     [data],
+  );
+  const selectedUnreadCount = useMemo(
+    () =>
+      data.filter(
+        (item) => selectedIds.includes(item.notification_id) && !item.is_read,
+      ).length,
+    [data, selectedIds],
   );
   const notificationTypeOptions = useMemo(() => {
     const counts = data.reduce((acc, item) => {
@@ -254,6 +264,30 @@ export default function NotificationPage() {
     } catch (err) {
       console.error(err);
       alert("Không thể đánh dấu đã đọc tất cả");
+    }
+  };
+
+  const markSelectedRead = async () => {
+    try {
+      const unreadSelectedIds = data
+        .filter((item) => selectedIds.includes(item.notification_id) && !item.is_read)
+        .map((item) => item.notification_id);
+
+      if (!unreadSelectedIds.length) return;
+
+      await Promise.all(
+        unreadSelectedIds.map((id) => axios.patch(`${API_URL}/notifications/${id}`)),
+      );
+
+      setData((prev) =>
+        prev.map((n) =>
+          unreadSelectedIds.includes(n.notification_id) ? { ...n, is_read: 1 } : n,
+        ),
+      );
+      refreshNotificationCount();
+    } catch (err) {
+      console.error(err);
+      alert("Không thể đánh dấu đã xem các thông báo đã chọn");
     }
   };
 
@@ -423,6 +457,21 @@ export default function NotificationPage() {
       refreshNotificationCount();
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xử lý yêu cầu xin trễ");
+    }
+  };
+
+  const respondAvailabilityEdit = async (id, action) => {
+    try {
+      await axios.post(
+        `${API_URL}/availability/request/edit/${id}/respond`,
+        { action },
+        { headers: authHeaders() },
+      );
+      alert(action === "approve" ? "Đã duyệt yêu cầu sửa" : "Đã từ chối yêu cầu sửa");
+      fetchData();
+      refreshNotificationCount();
+    } catch (err) {
+      alert(err.response?.data?.message || "Không thể xử lý yêu cầu sửa lịch rảnh");
     }
   };
 
@@ -619,25 +668,35 @@ export default function NotificationPage() {
                 <TrashIcon className="h-5 w-5" />
                 Xóa tất cả
               </button>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={markAllRead}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800"
-                >
-                  <CheckCircleIcon className="h-5 w-5" />
-                  Đọc tất cả
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={markAllRead}
+                disabled={unreadCount === 0}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckCircleIcon className="h-5 w-5" />
+                Đã xem tất cả
+              </button>
               {selectedIds.length > 0 && (
-                <button
-                  type="button"
-                  onClick={deleteSelected}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                  Xóa đã chọn
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={markSelectedRead}
+                    disabled={selectedUnreadCount === 0}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckCircleIcon className="h-5 w-5" />
+                    Đã xem đã chọn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deleteSelected}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                    Xóa đã chọn
+                  </button>
+                </>
               )}
               </div>
             </div>
@@ -658,6 +717,10 @@ export default function NotificationPage() {
               (n.request_status === null ||
                 n.request_status === undefined ||
                 n.request_status === "PENDING");
+            const showAvailabilityEditButtons =
+              n.type === "AVAILABILITY_EDIT_REQUEST" &&
+              role === "ADMIN" &&
+              n.request_status === "EDIT_PENDING";
 
             return (
               <article
@@ -750,6 +813,18 @@ export default function NotificationPage() {
                     </div>
                   )}
 
+                {n.type === "AVAILABILITY_EDIT_APPROVED" && role === "EMPLOYEE" && (
+                  <div className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">
+                    Admin đã duyệt yêu cầu sửa lịch rảnh của bạn.
+                  </div>
+                )}
+
+                {n.type === "AVAILABILITY_EDIT_REJECTED" && role === "EMPLOYEE" && (
+                  <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700 ring-1 ring-red-100">
+                    Yêu cầu sửa lịch rảnh đã bị từ chối.
+                  </div>
+                )}
+
                 {n.type === "AVAILABILITY_REQUEST" && role === "ADMIN" && (
                   <div className="mt-4 rounded-xl bg-slate-50 p-3">
                     {n.request_status === "APPROVED" && (
@@ -785,6 +860,45 @@ export default function NotificationPage() {
                           Từ chối
                         </ActionButton>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {n.type === "AVAILABILITY_EDIT_REQUEST" && role === "ADMIN" && (
+                  <div className="mt-4 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-100">
+                    <div className="mb-3 text-sm font-bold text-amber-800">
+                      {n.employee_name || "Nhân viên"} xin phép sửa lịch rảnh tháng {n.month}/{n.year}
+                    </div>
+                    {showAvailabilityEditButtons ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-9 items-center justify-center rounded-lg px-3 py-2 text-sm font-bold transition"
+                          style={{ backgroundColor: "#16a34a", color: "#ffffff" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            respondAvailabilityEdit(n.ref_id, "approve");
+                          }}
+                        >
+                          Duyệt sửa
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-9 items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-red-700"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            respondAvailabilityEdit(n.ref_id, "reject");
+                          }}
+                        >
+                          Từ chối
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${requestStatusLabel(n.request_status).className}`}
+                      >
+                        {requestStatusLabel(n.request_status).label}
+                      </span>
                     )}
                   </div>
                 )}

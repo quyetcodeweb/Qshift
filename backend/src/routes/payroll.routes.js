@@ -5,6 +5,7 @@ import {
   getPayrollAdjustments,
   getPayrollSettings,
   getPayrollSummary,
+  listPayrollFeedback,
   respondPayrollFeedback,
   resolvePayrollSchedule,
   submitPayrollFeedback,
@@ -21,6 +22,7 @@ router.get("/settings", verifyToken, getPayrollSettings);
 router.put("/settings", verifyToken, updatePayrollSettings);
 router.post("/resolve/:scheduleId", verifyToken, resolvePayrollSchedule);
 router.delete("/resolve/:scheduleId", verifyToken, undoPayrollResolution);
+router.get("/feedback", verifyToken, listPayrollFeedback);
 router.post("/feedback", verifyToken, submitPayrollFeedback);
 router.post("/feedback/:id/respond", verifyToken, respondPayrollFeedback);
 

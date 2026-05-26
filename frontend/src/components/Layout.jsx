@@ -29,6 +29,19 @@ function getStoredUser() {
   }
 }
 
+function readAvailabilityAccess() {
+  try {
+    const access = JSON.parse(localStorage.getItem("availabilityFillRequest"));
+    if (access?.expiresAt && Date.now() > Number(access.expiresAt)) {
+      localStorage.removeItem("availabilityFillRequest");
+      return null;
+    }
+    return access;
+  } catch {
+    return null;
+  }
+}
+
 function UserAvatar({ user, profile }) {
   const name = profile?.name || user?.employee_name || user?.username || "Q";
   const avatarUrl = profile?.avatar_url || user?.avatar_url;
@@ -72,13 +85,7 @@ function MobileChrome() {
   const user = getStoredUser();
   const location = useLocation();
   const [profile, setProfile] = React.useState(null);
-  const [availabilityAccess, setAvailabilityAccess] = React.useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("availabilityFillRequest"));
-    } catch {
-      return null;
-    }
-  });
+  const [availabilityAccess, setAvailabilityAccess] = React.useState(() => readAvailabilityAccess());
   const isActive = (path) => location.pathname === path;
   const showAvailabilityLink =
     role === "ADMIN" ||
@@ -86,17 +93,15 @@ function MobileChrome() {
 
   React.useEffect(() => {
     const refreshAvailabilityAccess = () => {
-      try {
-        setAvailabilityAccess(JSON.parse(localStorage.getItem("availabilityFillRequest")));
-      } catch {
-        setAvailabilityAccess(null);
-      }
+      setAvailabilityAccess(readAvailabilityAccess());
     };
 
+    const intervalId = window.setInterval(refreshAvailabilityAccess, 60000);
     window.addEventListener("availability-access-changed", refreshAvailabilityAccess);
     window.addEventListener("storage", refreshAvailabilityAccess);
 
     return () => {
+      window.clearInterval(intervalId);
       window.removeEventListener("availability-access-changed", refreshAvailabilityAccess);
       window.removeEventListener("storage", refreshAvailabilityAccess);
     };

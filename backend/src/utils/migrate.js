@@ -63,7 +63,10 @@ const ensureAvailabilityTables = async () => {
           month INT NOT NULL,
           year INT NOT NULL,
           data JSON,
-          status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+          status VARCHAR(32) DEFAULT 'PENDING',
+          submitted_at DATETIME NULL,
+          edit_requested_at DATETIME NULL,
+          edit_approved_at DATETIME NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
           FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
@@ -72,6 +75,24 @@ const ensureAvailabilityTables = async () => {
         )
       `);
       console.log("Created availability_requests table");
+    }
+
+    try {
+      await db.query("ALTER TABLE availability_requests MODIFY status VARCHAR(32) DEFAULT 'PENDING'");
+    } catch (e) {
+      console.warn("Could not widen availability_requests.status:", e.message);
+    }
+
+    const availabilityRequestColumns = [
+      ["submitted_at", "DATETIME NULL AFTER created_at"],
+      ["edit_requested_at", "DATETIME NULL AFTER submitted_at"],
+      ["edit_approved_at", "DATETIME NULL AFTER edit_requested_at"],
+    ];
+
+    for (const [columnName, definition] of availabilityRequestColumns) {
+      if (!(await columnExists("availability_requests", columnName))) {
+        await db.query(`ALTER TABLE availability_requests ADD COLUMN ${columnName} ${definition}`);
+      }
     }
   } catch (e) {
     console.warn("Could not ensure availability_requests table:", e.message);

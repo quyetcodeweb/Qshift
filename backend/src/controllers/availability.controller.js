@@ -43,9 +43,9 @@ export const requestAvailability = async (req, res) => {
       return res.status(400).json({ message: "month and year are required" });
     }
 
-    await service.requestAvailability(user_id, month, year, data);
+    const requestId = await service.requestAvailability(user_id, month, year, data);
 
-    res.json({ message: "Request sent" });
+    res.json({ message: "Request sent", request_id: requestId });
   } catch (err) {
     console.error("❌ requestAvailability error:", err.message);
     res.status(500).json({ message: err.message });
@@ -82,6 +82,76 @@ export const rejectRequest = async (req, res) => {
     res.json({ message: "Rejected" });
   } catch (err) {
     console.error(`❌ Reject error:`, err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const getMyAvailabilityRequest = async (req, res) => {
+  try {
+    const user_id = req.user?.user_id;
+    const { month, year } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({ message: "user_id not found in token" });
+    }
+
+    if (!month || !year) {
+      return res.status(400).json({ message: "month and year are required" });
+    }
+
+    const request = await service.getMyAvailabilityRequest(
+      user_id,
+      Number(month),
+      Number(year)
+    );
+
+    res.json(request || {});
+  } catch (err) {
+    console.error("Get my availability request error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const requestEditAvailability = async (req, res) => {
+  try {
+    const user_id = req.user?.user_id;
+    const { month, year } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ message: "user_id not found in token" });
+    }
+
+    if (!month || !year) {
+      return res.status(400).json({ message: "month and year are required" });
+    }
+
+    const requestId = await service.requestEditAvailability(
+      user_id,
+      Number(month),
+      Number(year)
+    );
+
+    res.json({ message: "Edit request sent", request_id: requestId });
+  } catch (err) {
+    console.error("Request edit availability error:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const respondEditAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
+
+    if (!["approve", "reject"].includes(action)) {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    await service.respondEditAvailability(id, action);
+
+    res.json({ message: "Edit request handled" });
+  } catch (err) {
+    console.error("Respond edit availability error:", err.message);
     res.status(500).json({ message: err.message });
   }
 };

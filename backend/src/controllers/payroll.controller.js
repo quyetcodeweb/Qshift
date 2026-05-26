@@ -716,6 +716,41 @@ export async function submitPayrollFeedback(req, res) {
   }
 }
 
+export async function listPayrollFeedback(req, res) {
+  try {
+    const user = await getUser(req.user?.user_id);
+
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    await ensurePayrollFeedbackTable();
+
+    const [rows] = await database.query(
+      `SELECT
+         pf.feedback_id,
+         pf.employee_id,
+         e.name AS employee_name,
+         COALESCE(e.email, u.username) AS email,
+         pf.subject,
+         pf.content,
+         pf.status,
+         pf.admin_reply,
+         DATE_FORMAT(pf.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+         DATE_FORMAT(pf.responded_at, '%Y-%m-%d %H:%i:%s') AS responded_at
+       FROM payroll_feedback pf
+       JOIN employees e ON pf.employee_id = e.employee_id
+       LEFT JOIN users u ON e.user_id = u.user_id
+       ORDER BY pf.created_at DESC, pf.feedback_id DESC`
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("[listPayrollFeedback] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
 export async function respondPayrollFeedback(req, res) {
   try {
     const user = await getUser(req.user?.user_id);

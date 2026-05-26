@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   Button,
@@ -31,7 +30,12 @@ const ACCESS_KEY = "availabilityFillRequest";
 
 function readAccess() {
   try {
-    return JSON.parse(localStorage.getItem(ACCESS_KEY));
+    const access = JSON.parse(localStorage.getItem(ACCESS_KEY));
+    if (access?.expiresAt && Date.now() > Number(access.expiresAt)) {
+      localStorage.removeItem(ACCESS_KEY);
+      return null;
+    }
+    return access;
   } catch {
     return null;
   }
@@ -55,12 +59,19 @@ function formatTime(value) {
   return value?.slice(0, 5) || "--:--";
 }
 
+function formatRemainingTime(milliseconds) {
+  if (!milliseconds || milliseconds <= 0) return "0 phút";
+  const totalMinutes = Math.ceil(milliseconds / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours} giờ ${minutes} phút` : `${minutes} phút`;
+}
+
 export default function AvailabilityPage() {
-  const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user?.role;
   const userId = user?.user_id;
-  const employeeAccess = useMemo(() => readAccess(), []);
+  const [employeeAccess, setEmployeeAccess] = useState(() => readAccess());
   const searchParams = new URLSearchParams(window.location.search);
   const requestedMonth = Number(employeeAccess?.month || searchParams.get("month"));
   const requestedYear = Number(employeeAccess?.year || searchParams.get("year"));
@@ -77,6 +88,8 @@ export default function AvailabilityPage() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [requestMeta, setRequestMeta] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const isEmployee = role === "EMPLOYEE";
   const isAdmin = role === "ADMIN";
@@ -113,6 +126,23 @@ export default function AvailabilityPage() {
     () => JSON.stringify(grid) !== JSON.stringify(originalGrid),
     [grid, originalGrid],
   );
+  const submittedAt = requestMeta?.submitted_at ? new Date(requestMeta.submitted_at).getTime() : null;
+  const localViewUntil = employeeAccess?.expiresAt ? Number(employeeAccess.expiresAt) : null;
+  const submittedViewUntil = submittedAt ? submittedAt + 5 * 60 * 60 * 1000 : null;
+  const viewUntil = Math.max(localViewUntil || 0, submittedViewUntil || 0) || null;
+  const isWithinReviewWindow = Boolean(viewUntil && now <= viewUntil);
+  const employeeRequestStatus = requestMeta?.status || "PENDING";
+  const isEditApproved = employeeRequestStatus === "EDIT_APPROVED";
+  const isEditPending = employeeRequestStatus === "EDIT_PENDING";
+  const isLockedAfterSubmit =
+    isEmployee &&
+    Boolean(requestMeta?.id) &&
+    !["PENDING", "EDIT_APPROVED"].includes(employeeRequestStatus);
+  const canEditGrid = !isLockedAfterSubmit || isEditApproved;
+  const canRequestEdit =
+    isEmployee &&
+    isWithinReviewWindow &&
+    ["SUBMITTED", "APPROVED", "REJECTED"].includes(employeeRequestStatus);
 
   const createEmptyGrid = useCallback((targetMonth, targetYear, shiftList) => {
     const days = new Date(targetYear, targetMonth, 0).getDate();
@@ -191,20 +221,55 @@ export default function AvailabilityPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/availability/${employeeId}?month=${month}&year=${year}`, {
-        headers: authHeaders(),
-      });
-      const fallbackAvailability = Array.isArray(employeeAccess?.availability)
-        ? employeeAccess.availability
+      const [res, metaRes] = await Promise.all([
+        axios.get(`${API_URL}/availability/${employeeId}?month=${month}&year=${year}`, {
+          headers: authHeaders(),
+        }),
+        isEmployee
+          ? axios.get(`${API_URL}/availability/request/me?month=${month}&year=${year}`, {
+              headers: authHeaders(),
+            })
+          : Promise.resolve({ data: null }),
+      ]);
+      const accessSnapshot = readAccess();
+      const fallbackAvailability = Array.isArray(accessSnapshot?.availability)
+        ? accessSnapshot.availability
         : [];
       const records = res.data.length > 0 ? res.data : fallbackAvailability;
+      setRequestMeta(metaRes.data?.id ? metaRes.data : null);
       applyAvailabilityToGrid(records);
+
+      if (isEmployee && metaRes.data?.submitted_at) {
+        const submittedTime = new Date(metaRes.data.submitted_at).getTime();
+        const currentAccess = readAccess() || {};
+        const submittedExpiresAt = Number.isNaN(submittedTime)
+          ? null
+          : submittedTime + 5 * 60 * 60 * 1000;
+        const currentExpiresAt = currentAccess.expiresAt ? Number(currentAccess.expiresAt) : null;
+        const expiresAt = Math.max(submittedExpiresAt || 0, currentExpiresAt || 0);
+        if (Date.now() > expiresAt) {
+          localStorage.removeItem(ACCESS_KEY);
+          setEmployeeAccess(null);
+          window.dispatchEvent(new Event("availability-access-changed"));
+        } else {
+          const nextAccess = {
+            ...currentAccess,
+            month,
+            year,
+            availability: records,
+            expiresAt,
+          };
+          localStorage.setItem(ACCESS_KEY, JSON.stringify(nextAccess));
+          setEmployeeAccess(nextAccess);
+          window.dispatchEvent(new Event("availability-access-changed"));
+        }
+      }
     } catch (err) {
       console.error("LOAD DATA error:", err.response?.data || err.message);
     } finally {
       setLoading(false);
     }
-  }, [applyAvailabilityToGrid, employeeAccess?.availability, employeeId, month, year]);
+  }, [applyAvailabilityToGrid, employeeId, isEmployee, month, year]);
 
   useEffect(() => {
     fetchInit();
@@ -229,6 +294,20 @@ export default function AvailabilityPage() {
     fetchData();
   }, [canEmployeeFill, employeeId, fetchData, shifts.length]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isEmployee || !employeeAccess?.expiresAt) return;
+    if (now <= Number(employeeAccess.expiresAt)) return;
+
+    localStorage.removeItem(ACCESS_KEY);
+    setEmployeeAccess(null);
+    window.dispatchEvent(new Event("availability-access-changed"));
+  }, [employeeAccess?.expiresAt, isEmployee, now]);
+
   const buildAvailability = () => {
     const availability = [];
 
@@ -246,12 +325,9 @@ export default function AvailabilityPage() {
     return availability;
   };
 
-  const clearEmployeeAccess = () => {
-    localStorage.removeItem(ACCESS_KEY);
-    window.dispatchEvent(new Event("availability-access-changed"));
-  };
-
   const toggle = (day, shiftId) => {
+    if (!canEditGrid) return;
+
     setGrid((prev) => ({
       ...prev,
       [day]: {
@@ -277,10 +353,19 @@ export default function AvailabilityPage() {
           { headers: authHeaders() },
         );
 
-        clearEmployeeAccess();
+        const nextAccess = {
+          ...(employeeAccess || {}),
+          month,
+          year,
+          availability,
+          expiresAt: Date.now() + 5 * 60 * 60 * 1000,
+        };
+        localStorage.setItem(ACCESS_KEY, JSON.stringify(nextAccess));
+        setEmployeeAccess(nextAccess);
+        window.dispatchEvent(new Event("availability-access-changed"));
         window.dispatchEvent(new Event("notification-count-changed"));
         alert("Đã lưu lịch rảnh và gửi thông báo cho admin!");
-        navigate("/");
+        fetchData();
         return;
       }
 
@@ -300,6 +385,23 @@ export default function AvailabilityPage() {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.message || "Có lỗi xảy ra!");
+    }
+  };
+
+  const requestEdit = async () => {
+    try {
+      await axios.post(
+        `${API_URL}/availability/request/edit`,
+        { month, year },
+        { headers: authHeaders() },
+      );
+
+      alert("Đã gửi yêu cầu sửa lịch rảnh cho admin!");
+      fetchData();
+      window.dispatchEvent(new Event("notification-count-changed"));
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Không thể gửi yêu cầu sửa!");
     }
   };
 
@@ -331,6 +433,26 @@ export default function AvailabilityPage() {
   };
 
   if (isEmployee && !canEmployeeFill) {
+    return (
+      <div className="mx-auto max-w-5xl p-4 sm:p-6">
+        <Card className="rounded-md border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <InformationCircleIcon className="mt-0.5 h-6 w-6 shrink-0 text-blue-600" />
+            <div>
+              <Typography variant="h5" className="font-bold text-gray-950">
+                Thời gian rảnh
+              </Typography>
+              <Typography className="mt-2 text-sm leading-6 text-gray-600">
+                Mục này chỉ mở khi admin gửi yêu cầu điền lịch rảnh. Vui lòng kiểm tra thông báo và nhấn OK để bắt đầu.
+              </Typography>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isEmployee && isLockedAfterSubmit && !isWithinReviewWindow) {
     return (
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
         <Card className="rounded-md border border-gray-200 bg-white p-6 shadow-sm">
@@ -565,15 +687,38 @@ export default function AvailabilityPage() {
               <Typography className="text-sm text-gray-500">
                 {selectedEmployee?.name || "Chưa chọn nhân viên"} · Tháng {month}/{year}
               </Typography>
+              {isLockedAfterSubmit && (
+                <Typography className="mt-1 text-sm font-semibold text-amber-700">
+                  Lịch đã lưu, bạn chỉ được xem trong {formatRemainingTime(viewUntil - now)} và không thể sửa hoặc lưu lại.
+                  {isEditPending ? " Yêu cầu sửa đang chờ admin duyệt." : ""}
+                </Typography>
+              )}
+              {isEditApproved && (
+                <Typography className="mt-1 text-sm font-semibold text-green-700">
+                  Admin đã duyệt yêu cầu sửa. Bạn có thể cập nhật và lưu lại lịch rảnh.
+                </Typography>
+              )}
             </div>
-            <Button
-              onClick={handleSave}
-              disabled={!employeeId || loading || (!isEmployee && !hasChanged)}
-              className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2.5 normal-case text-white disabled:opacity-50"
-            >
-              <CheckCircleIcon className="h-5 w-5" />
-              Lưu lịch rảnh
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {canRequestEdit && (
+                <Button
+                  variant="outlined"
+                  onClick={requestEdit}
+                  className="flex items-center justify-center gap-2 rounded-md border-amber-200 px-4 py-2.5 normal-case text-amber-700"
+                >
+                  <PaperAirplaneIcon className="h-5 w-5" />
+                  Yêu cầu sửa
+                </Button>
+              )}
+              <Button
+                onClick={handleSave}
+                disabled={!employeeId || loading || !canEditGrid || (!isEmployee && !hasChanged)}
+                className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2.5 normal-case text-white disabled:opacity-50"
+              >
+                <CheckCircleIcon className="h-5 w-5" />
+                Lưu lịch rảnh
+              </Button>
+            </div>
           </div>
 
           {!employeeId ? (
@@ -631,6 +776,7 @@ export default function AvailabilityPage() {
                                 <button
                                   type="button"
                                   onClick={() => toggle(day, shift.shift_id)}
+                                  disabled={!canEditGrid}
                                   className={`flex h-10 w-full items-center justify-center rounded-md border text-sm font-bold transition ${
                                     checked
                                       ? "border-green-200 bg-green-50 text-green-700"
