@@ -83,6 +83,35 @@ async function getTodaySchedulesForEmployee(employeeId) {
     .sort((a, b) => a.shiftStart - b.shiftStart || a.schedule_id - b.schedule_id);
 }
 
+async function getUpcomingSchedulesForEmployee(employeeId, daysAhead = 90) {
+  const [schedules] = await database.query(
+    `SELECT
+      CAST(s.schedule_id AS CHAR) AS schedule_id,
+      CAST(s.employee_id AS CHAR) AS employee_id,
+      e.name AS employee_name,
+      DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
+      sh.shift_name,
+      TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
+      TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time
+     FROM schedules s
+     JOIN employees e ON s.employee_id = e.employee_id
+     JOIN shifts sh ON s.shift_id = sh.shift_id
+     WHERE s.employee_id = ?
+       AND s.status = 'PUBLISHED'
+       AND s.work_date >= ${TODAY_SQL}
+       AND s.work_date <= DATE_ADD(${TODAY_SQL}, INTERVAL ? DAY)`,
+    [employeeId, daysAhead]
+  );
+
+  return schedules
+    .map((schedule) => {
+      const { start, end } = getShiftBounds(schedule);
+      return { ...schedule, shiftStart: start, shiftEnd: end };
+    })
+    .filter((schedule) => schedule.shiftStart && schedule.shiftEnd)
+    .sort((a, b) => a.shiftStart - b.shiftStart || a.schedule_id - b.schedule_id);
+}
+
 function findContiguousScheduleGroup(schedules, scheduleId) {
   const selectedIndex = schedules.findIndex(
     (schedule) => Number(schedule.schedule_id) === Number(scheduleId)
@@ -107,6 +136,36 @@ function findContiguousScheduleGroup(schedules, scheduleId) {
   }
 
   return schedules.slice(firstIndex, lastIndex + 1);
+}
+
+function buildContiguousScheduleGroups(schedules) {
+  const groups = [];
+
+  schedules.forEach((schedule) => {
+    const lastGroup = groups[groups.length - 1];
+    const isLinked =
+      lastGroup &&
+      lastGroup.employee_id === schedule.employee_id &&
+      lastGroup.work_date === schedule.work_date &&
+      lastGroup.shiftEnd.getTime() === schedule.shiftStart.getTime();
+
+    if (isLinked) {
+      lastGroup.schedules.push(schedule);
+      lastGroup.schedule_ids.push(schedule.schedule_id);
+      lastGroup.shift_name = `${lastGroup.shift_name}-${schedule.shift_name}`;
+      lastGroup.shiftEnd = schedule.shiftEnd;
+      lastGroup.end_time = schedule.end_time;
+      return;
+    }
+
+    groups.push({
+      ...schedule,
+      schedules: [schedule],
+      schedule_ids: [schedule.schedule_id],
+    });
+  });
+
+  return groups;
 }
 
 async function getCurrentUser(userId) {
@@ -646,6 +705,65 @@ export async function updateAttendanceSettings(req, res) {
   }
 }
 
+export async function getLateRequestOptions(req, res) {
+  try {
+    await ensureLateRequestTable();
+    const user = await getCurrentUser(req.user?.user_id);
+
+    if (!user) {
+      return res.status(401).json({ message: "Invalid user" });
+    }
+
+    const employee = await getEmployeeByUserId(user.user_id);
+
+    if (!employee) {
+      return res.status(403).json({ message: "Khong tim thay ho so nhan vien" });
+    }
+
+    const now = new Date();
+    const upcomingSchedules = await getUpcomingSchedulesForEmployee(employee.employee_id);
+    const groups = buildContiguousScheduleGroups(
+      upcomingSchedules.filter((schedule) => schedule.shiftStart > now)
+    );
+    const scheduleIds = groups.flatMap((group) => group.schedule_ids);
+    const pendingByScheduleId = new Map();
+
+    if (scheduleIds.length) {
+      const placeholders = scheduleIds.map(() => "?").join(",");
+      const [pendingRequests] = await database.query(
+        `SELECT late_request_id, schedule_id
+         FROM attendance_late_requests
+         WHERE employee_id = ?
+           AND schedule_id IN (${placeholders})
+           AND status = 'PENDING'`,
+        [employee.employee_id, ...scheduleIds]
+      );
+
+      pendingRequests.forEach((request) => {
+        pendingByScheduleId.set(Number(request.schedule_id), request.late_request_id);
+      });
+    }
+
+    const options = groups.map((group) => ({
+      schedule_id: group.schedule_ids[0],
+      schedule_ids: group.schedule_ids,
+      work_date: group.work_date,
+      shift_name: group.shift_name,
+      start_time: group.start_time,
+      end_time: group.end_time,
+      pending_late_request_id:
+        group.schedule_ids
+          .map((scheduleId) => pendingByScheduleId.get(Number(scheduleId)))
+          .find(Boolean) || null,
+    }));
+
+    res.json({ options });
+  } catch (error) {
+    console.error("[getLateRequestOptions] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
 export async function markAttendance(req, res) {
   try {
     await ensureLateRequestTable();
@@ -824,11 +942,11 @@ export async function requestLateAttendance(req, res) {
       return res.status(400).json({ message: "Ca làm và số phút xin trễ không hợp lệ" });
     }
 
-    const todaySchedules = await getTodaySchedulesForEmployee(employee.employee_id);
-    const groupSchedules = findContiguousScheduleGroup(todaySchedules, schedule_id);
+    const upcomingSchedules = await getUpcomingSchedulesForEmployee(employee.employee_id);
+    const groupSchedules = findContiguousScheduleGroup(upcomingSchedules, schedule_id);
 
     if (!groupSchedules.length) {
-      return res.status(404).json({ message: "Không tìm thấy ca làm hôm nay" });
+      return res.status(404).json({ message: "Không tìm thấy ca làm tương lai" });
     }
 
     const groupStart = groupSchedules[0].shiftStart;

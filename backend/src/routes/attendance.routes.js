@@ -3,6 +3,7 @@ import { verifyToken } from "../middlewares/auth.middleware.js";
 import {
   getAttendanceSettings,
   getAttendanceHistory,
+  getLateRequestOptions,
   getTodayAttendance,
   markAttendance,
   requestLateAttendance,
@@ -15,6 +16,7 @@ const router = express.Router();
 router.get("/today", verifyToken, getTodayAttendance);
 router.get("/history", verifyToken, getAttendanceHistory);
 router.get("/settings", verifyToken, getAttendanceSettings);
+router.get("/late-request/options", verifyToken, getLateRequestOptions);
 router.put("/settings", verifyToken, updateAttendanceSettings);
 router.post("/mark", verifyToken, markAttendance);
 router.post("/late-request", verifyToken, requestLateAttendance);

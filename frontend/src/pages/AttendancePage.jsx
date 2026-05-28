@@ -70,6 +70,16 @@ function formatShiftTime(value) {
   return value?.slice(0, 5) || "--:--";
 }
 
+function formatDisplayDate(value) {
+  if (!value) return "--/--/----";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("vi-VN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 function statusChip(group) {
   if (!group.check_in) {
     return { label: "Chưa chấm công", color: "gray" };
@@ -184,6 +194,8 @@ export default function AttendancePage() {
   const [currentDay, setCurrentDay] = useState(() => formatDate(new Date()));
   const [lateModalOpen, setLateModalOpen] = useState(false);
   const [lateForm, setLateForm] = useState({ schedule_id: "", minutes: "15", reason: "" });
+  const [lateOptions, setLateOptions] = useState([]);
+  const [lateOptionsLoading, setLateOptionsLoading] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [attendanceSettings, setAttendanceSettings] = useState(defaultAttendanceSettings);
   const [settingsForm, setSettingsForm] = useState(defaultAttendanceSettings);
@@ -221,6 +233,24 @@ export default function AttendancePage() {
     }
   }, [isAdmin]);
 
+  const fetchLateOptions = useCallback(async () => {
+    if (isAdmin) return;
+
+    try {
+      setLateOptionsLoading(true);
+      setError("");
+      const res = await axios.get(`${API_URL}/attendance/late-request/options`, {
+        headers: authHeaders(),
+      });
+      setLateOptions(res.data?.options || []);
+    } catch (err) {
+      setError(err.response?.data?.message || "Không thể tải danh sách ca xin trễ");
+      setLateOptions([]);
+    } finally {
+      setLateOptionsLoading(false);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     fetchToday();
   }, [currentDay, fetchToday]);
@@ -228,6 +258,12 @@ export default function AttendancePage() {
   useEffect(() => {
     fetchAttendanceSettings();
   }, [fetchAttendanceSettings]);
+
+  useEffect(() => {
+    if (lateModalOpen) {
+      fetchLateOptions();
+    }
+  }, [fetchLateOptions, lateModalOpen]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -254,9 +290,12 @@ export default function AttendancePage() {
     [groups],
   );
 
-  const upcomingGroups = useMemo(
-    () => groups.filter((group) => !group.check_in && now < group.start),
-    [groups, now],
+  const selectedLateOption = useMemo(
+    () =>
+      lateOptions.find(
+        (option) => String(option.schedule_id) === String(lateForm.schedule_id),
+      ) || null,
+    [lateForm.schedule_id, lateOptions],
   );
 
   const canCheckIn = (group) => {
@@ -365,6 +404,7 @@ export default function AttendancePage() {
       );
       setLateModalOpen(false);
       setLateForm({ schedule_id: "", minutes: "15", reason: "" });
+      await fetchLateOptions();
       window.dispatchEvent(new Event("notification-count-changed"));
       alert("Đã gửi yêu cầu xin trễ đến admin");
     } catch (err) {
@@ -735,17 +775,71 @@ export default function AttendancePage() {
           </div>
         </DialogHeader>
         <DialogBody className="space-y-4">
-          <Select
-            label="Ca muốn xin trễ"
-            value={lateForm.schedule_id}
-            onChange={(value) => setLateForm({ ...lateForm, schedule_id: value || "" })}
-          >
-            {upcomingGroups.map((group) => (
-              <Option key={group.schedule_id} value={String(group.schedule_id)}>
-                {group.shift_name} ({formatShiftTime(group.start_time)} - {formatShiftTime(group.end_time)})
-              </Option>
-            ))}
-          </Select>
+          <div>
+            <div className="mb-2 text-sm font-bold text-gray-800">Ca muốn xin trễ</div>
+            <div
+              className="max-h-72 touch-pan-y space-y-2 overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white p-2 [-webkit-overflow-scrolling:touch]"
+              role="listbox"
+            >
+              {lateOptionsLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Spinner className="h-6 w-6 text-orange-600" />
+                </div>
+              ) : lateOptions.length === 0 ? (
+                <div className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-800">
+                  Hiện không có ca tương lai nào để xin trễ.
+                </div>
+              ) : (
+                lateOptions.map((option) => {
+                  const selected = String(option.schedule_id) === String(lateForm.schedule_id);
+                  const disabled = Boolean(option.pending_late_request_id);
+
+                  return (
+                    <button
+                      key={option.schedule_id}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() =>
+                        setLateForm({ ...lateForm, schedule_id: String(option.schedule_id) })
+                      }
+                      role="option"
+                      aria-selected={selected}
+                      className={`min-h-16 w-full rounded-md border px-3 py-2 text-left transition ${
+                        selected
+                          ? "border-orange-400 bg-orange-50 text-orange-900"
+                          : "border-gray-200 bg-white text-gray-800 hover:border-orange-200 hover:bg-orange-50"
+                      } ${disabled ? "cursor-not-allowed opacity-55" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold">
+                            {option.shift_name}
+                          </div>
+                          <div className="mt-1 text-xs font-semibold text-gray-500">
+                            {formatDisplayDate(option.work_date)} ·{" "}
+                            {formatShiftTime(option.start_time)} -{" "}
+                            {formatShiftTime(option.end_time)}
+                          </div>
+                        </div>
+                        <div
+                          className={`mt-1 h-4 w-4 shrink-0 rounded-full border ${
+                            selected
+                              ? "border-orange-600 bg-orange-600"
+                              : "border-gray-300 bg-white"
+                          }`}
+                        />
+                      </div>
+                      {disabled && (
+                        <div className="mt-2 text-xs font-semibold text-amber-700">
+                          Đã có yêu cầu đang chờ duyệt
+                        </div>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
           <Select
             label="Thời gian muốn trễ"
             value={lateForm.minutes}
@@ -762,9 +856,10 @@ export default function AttendancePage() {
             value={lateForm.reason}
             onChange={(event) => setLateForm({ ...lateForm, reason: event.target.value })}
           />
-          {upcomingGroups.length === 0 && (
-            <div className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-800">
-              Hiện không có ca nào chưa bắt đầu để xin trễ.
+          {selectedLateOption && (
+            <div className="rounded-md bg-orange-50 p-3 text-sm font-medium leading-6 text-orange-800">
+              Bạn đang chọn {selectedLateOption.shift_name} ngày{" "}
+              {formatDisplayDate(selectedLateOption.work_date)}.
             </div>
           )}
         </DialogBody>
@@ -774,7 +869,11 @@ export default function AttendancePage() {
           </Button>
           <Button
             onClick={sendLateRequest}
-            disabled={!lateForm.schedule_id || actionLoading === "late-request"}
+            disabled={
+              !lateForm.schedule_id ||
+              lateOptionsLoading ||
+              actionLoading === "late-request"
+            }
             className="flex items-center gap-2 rounded-md bg-orange-600 normal-case"
           >
             <PaperAirplaneIcon className="h-4 w-4" />
