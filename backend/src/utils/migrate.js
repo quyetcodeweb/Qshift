@@ -285,6 +285,52 @@ export const runMigrations = async () => {
       console.warn("Could not ensure attendance table:", e.message);
     }
 
+    try {
+      const attendanceLocationColumns = [
+        ["check_in_latitude", "DOUBLE NULL"],
+        ["check_in_longitude", "DOUBLE NULL"],
+        ["check_in_accuracy", "DOUBLE NULL"],
+        ["check_out_latitude", "DOUBLE NULL"],
+        ["check_out_longitude", "DOUBLE NULL"],
+        ["check_out_accuracy", "DOUBLE NULL"],
+      ];
+
+      for (const [column, definition] of attendanceLocationColumns) {
+        if (!(await columnExists("attendance", column))) {
+          await db.query(`ALTER TABLE attendance ADD COLUMN ${column} ${definition}`);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not ensure attendance GPS columns:", e.message);
+    }
+
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS attendance_settings (
+          setting_key VARCHAR(80) PRIMARY KEY,
+          setting_value VARCHAR(255) NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      const defaults = [
+        ["require_gps", "false"],
+        ["workplace_latitude", ""],
+        ["workplace_longitude", ""],
+        ["allowed_radius_meters", "300"],
+      ];
+
+      for (const [key, value] of defaults) {
+        await db.query(
+          `INSERT INTO attendance_settings (setting_key, setting_value)
+           VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE setting_value = setting_value`,
+          [key, value]
+        );
+      }
+    } catch (e) {
+      console.warn("Could not ensure attendance settings:", e.message);
+    }
+
     // Add avatar_url column to employees if needed
     try {
       if (!(await columnExists("employees", "avatar_url"))) {

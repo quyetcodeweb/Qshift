@@ -12,6 +12,7 @@ import {
   Option,
   Select,
   Spinner,
+  Switch,
   Typography,
 } from "@material-tailwind/react";
 import {
@@ -20,7 +21,9 @@ import {
   CalendarDaysIcon,
   CheckCircleIcon,
   ClockIcon,
+  Cog6ToothIcon,
   ExclamationTriangleIcon,
+  MapPinIcon,
   PaperAirplaneIcon,
   UserCircleIcon,
   XMarkIcon,
@@ -134,6 +137,42 @@ function buildAttendanceGroups(records) {
   });
 }
 
+const defaultAttendanceSettings = {
+  require_gps: false,
+  workplace_latitude: "",
+  workplace_longitude: "",
+  allowed_radius_meters: 300,
+};
+
+function normalizeAttendanceSettings(settings = {}) {
+  return {
+    require_gps: Boolean(settings.require_gps),
+    workplace_latitude:
+      settings.workplace_latitude === null || settings.workplace_latitude === undefined
+        ? ""
+        : String(settings.workplace_latitude),
+    workplace_longitude:
+      settings.workplace_longitude === null || settings.workplace_longitude === undefined
+        ? ""
+        : String(settings.workplace_longitude),
+    allowed_radius_meters: Number(settings.allowed_radius_meters || 300),
+  };
+}
+
+function getCurrentPosition() {
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error("Trình duyệt không hỗ trợ định vị GPS"));
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  });
+}
+
 export default function AttendancePage() {
   const role = getRole();
   const isAdmin = role === "ADMIN";
@@ -145,6 +184,11 @@ export default function AttendancePage() {
   const [currentDay, setCurrentDay] = useState(() => formatDate(new Date()));
   const [lateModalOpen, setLateModalOpen] = useState(false);
   const [lateForm, setLateForm] = useState({ schedule_id: "", minutes: "15", reason: "" });
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [attendanceSettings, setAttendanceSettings] = useState(defaultAttendanceSettings);
+  const [settingsForm, setSettingsForm] = useState(defaultAttendanceSettings);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const fetchToday = useCallback(async () => {
     try {
@@ -162,9 +206,28 @@ export default function AttendancePage() {
     }
   }, []);
 
+  const fetchAttendanceSettings = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/attendance/settings`, {
+        headers: authHeaders(),
+      });
+      const nextSettings = normalizeAttendanceSettings(res.data?.settings);
+      setAttendanceSettings(nextSettings);
+      setSettingsForm(nextSettings);
+    } catch (err) {
+      if (isAdmin) {
+        setError(err.response?.data?.message || "Không thể tải thiết lập chấm công");
+      }
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     fetchToday();
   }, [currentDay, fetchToday]);
+
+  useEffect(() => {
+    fetchAttendanceSettings();
+  }, [fetchAttendanceSettings]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -205,13 +268,36 @@ export default function AttendancePage() {
   const canCheckOut = (group) =>
     Boolean(group.end && group.check_in && !group.check_out && now >= group.end);
 
+  const resolveAttendanceLocation = async () => {
+    if (!attendanceSettings.require_gps) return {};
+
+    setLocationLoading(true);
+    try {
+      const position = await getCurrentPosition();
+      return {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+    } catch (err) {
+      throw new Error(
+        err.code === 1
+          ? "Vui lòng cho phép truy cập vị trí để chấm công"
+          : err.message || "Không thể lấy vị trí hiện tại",
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
   const markAttendance = async (scheduleId, action) => {
     try {
       setActionLoading(`${scheduleId}-${action}`);
       setError("");
+      const locationPayload = await resolveAttendanceLocation();
       await axios.post(
         `${API_URL}/attendance/mark`,
-        { schedule_id: scheduleId, action },
+        { schedule_id: scheduleId, action, ...locationPayload },
         { headers: authHeaders() },
       );
       await fetchToday();
@@ -219,6 +305,43 @@ export default function AttendancePage() {
       setError(err.response?.data?.message || "Không thể ghi nhận chấm công");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const fillWorkplaceFromCurrentLocation = async () => {
+    try {
+      setLocationLoading(true);
+      setError("");
+      const position = await getCurrentPosition();
+      setSettingsForm((prev) => ({
+        ...prev,
+        workplace_latitude: String(position.coords.latitude),
+        workplace_longitude: String(position.coords.longitude),
+      }));
+    } catch (err) {
+      setError(err.message || "Không thể lấy vị trí hiện tại");
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const saveAttendanceSettings = async () => {
+    try {
+      setSettingsLoading(true);
+      setError("");
+      const res = await axios.put(
+        `${API_URL}/attendance/settings`,
+        settingsForm,
+        { headers: authHeaders() },
+      );
+      const nextSettings = normalizeAttendanceSettings(res.data?.settings);
+      setAttendanceSettings(nextSettings);
+      setSettingsForm(nextSettings);
+      setSettingsModalOpen(false);
+    } catch (err) {
+      setError(err.response?.data?.message || "Không thể lưu thiết lập chấm công");
+    } finally {
+      setSettingsLoading(false);
     }
   };
 
@@ -256,6 +379,7 @@ export default function AttendancePage() {
     const checkOutVisible = !isAdmin && canCheckOut(group);
     const actionKey = checkInVisible ? "check_in" : "check_out";
     const isBusy = actionLoading === `${group.schedule_id}-${actionKey}`;
+    const isLocating = locationLoading && isBusy;
 
     if (checkInVisible) {
       return (
@@ -265,8 +389,12 @@ export default function AttendancePage() {
           disabled={isBusy}
           onClick={() => markAttendance(group.schedule_id, "check_in")}
         >
-          <ClockIcon className="h-4 w-4" />
-          Chấm vào
+          {attendanceSettings.require_gps ? (
+            <MapPinIcon className="h-4 w-4" />
+          ) : (
+            <ClockIcon className="h-4 w-4" />
+          )}
+          {isLocating ? "Đang định vị..." : "Chấm vào"}
         </Button>
       );
     }
@@ -279,8 +407,12 @@ export default function AttendancePage() {
           disabled={isBusy}
           onClick={() => markAttendance(group.schedule_id, "check_out")}
         >
-          <ArrowRightOnRectangleIcon className="h-4 w-4" />
-          Chấm ra
+          {attendanceSettings.require_gps ? (
+            <MapPinIcon className="h-4 w-4" />
+          ) : (
+            <ArrowRightOnRectangleIcon className="h-4 w-4" />
+          )}
+          {isLocating ? "Đang định vị..." : "Chấm ra"}
         </Button>
       );
     }
@@ -310,6 +442,16 @@ export default function AttendancePage() {
           </Typography>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <Button
+              size="sm"
+              onClick={() => setSettingsModalOpen(true)}
+              className="flex items-center gap-2 rounded-md bg-blue-600 normal-case"
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+              Thiết lập
+            </Button>
+          )}
           {!isAdmin && (
             <Button
               size="sm"
@@ -433,6 +575,26 @@ export default function AttendancePage() {
             </div>
           </Card>
 
+          <Card className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <MapPinIcon
+                className={`mt-0.5 h-5 w-5 shrink-0 ${
+                  attendanceSettings.require_gps ? "text-blue-700" : "text-gray-400"
+                }`}
+              />
+              <div>
+                <Typography className="text-sm font-bold text-gray-950">
+                  GPS {attendanceSettings.require_gps ? "đang bật" : "đang tắt"}
+                </Typography>
+                <Typography className="mt-1 text-sm leading-6 text-gray-600">
+                  {attendanceSettings.require_gps
+                    ? "Nhân viên cần cấp quyền vị trí trước khi chấm công."
+                    : "Chấm công không yêu cầu định vị vị trí."}
+                </Typography>
+              </div>
+            </div>
+          </Card>
+
           {!isAdmin && (
             <Card className="rounded-md border border-orange-100 bg-orange-50 p-4 shadow-sm">
               <div className="flex items-start gap-3">
@@ -450,6 +612,112 @@ export default function AttendancePage() {
           )}
         </div>
       </div>
+
+      <Dialog open={settingsModalOpen} handler={() => setSettingsModalOpen(false)} size="sm">
+        <DialogHeader className="border-b border-gray-100">
+          <div className="flex w-full items-center justify-between gap-3">
+            <Typography variant="h5" className="font-bold text-gray-950">
+              Thiết lập chấm công
+            </Typography>
+            <button
+              type="button"
+              onClick={() => setSettingsModalOpen(false)}
+              className="rounded-md p-2 text-gray-500 hover:bg-gray-100"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="rounded-md border border-gray-200 p-4">
+            <Switch
+              label="Bắt buộc định vị GPS khi chấm công"
+              checked={settingsForm.require_gps}
+              onChange={(event) =>
+                setSettingsForm((prev) => ({
+                  ...prev,
+                  require_gps: event.target.checked,
+                }))
+              }
+            />
+            <Typography className="mt-2 text-sm leading-6 text-gray-600">
+              Khi bật, nhân viên phải cấp quyền vị trí trước khi chấm vào hoặc chấm ra.
+            </Typography>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Vĩ độ nơi làm việc"
+              type="number"
+              step="any"
+              value={settingsForm.workplace_latitude}
+              onChange={(event) =>
+                setSettingsForm((prev) => ({
+                  ...prev,
+                  workplace_latitude: event.target.value,
+                }))
+              }
+            />
+            <Input
+              label="Kinh độ nơi làm việc"
+              type="number"
+              step="any"
+              value={settingsForm.workplace_longitude}
+              onChange={(event) =>
+                setSettingsForm((prev) => ({
+                  ...prev,
+                  workplace_longitude: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <Input
+            label="Bán kính hợp lệ (m)"
+            type="number"
+            min="20"
+            max="5000"
+            value={String(settingsForm.allowed_radius_meters)}
+            onChange={(event) =>
+              setSettingsForm((prev) => ({
+                ...prev,
+                allowed_radius_meters: event.target.value,
+              }))
+            }
+          />
+
+          <Button
+            type="button"
+            variant="outlined"
+            onClick={fillWorkplaceFromCurrentLocation}
+            disabled={locationLoading}
+            className="flex items-center gap-2 rounded-md normal-case"
+          >
+            <MapPinIcon className="h-4 w-4" />
+            {locationLoading ? "Đang lấy vị trí..." : "Dùng vị trí hiện tại làm nơi làm việc"}
+          </Button>
+
+          <div className="rounded-md bg-blue-50 p-3 text-sm font-medium leading-6 text-blue-800">
+            Có thể để trống tọa độ nếu chỉ muốn ghi nhận vị trí GPS mà chưa giới hạn phạm vi.
+          </div>
+        </DialogBody>
+        <DialogFooter className="gap-2 border-t border-gray-100">
+          <Button
+            variant="text"
+            onClick={() => setSettingsModalOpen(false)}
+            className="rounded-md normal-case text-gray-700"
+          >
+            Hủy
+          </Button>
+          <Button
+            onClick={saveAttendanceSettings}
+            disabled={settingsLoading}
+            className="rounded-md bg-blue-600 normal-case"
+          >
+            {settingsLoading ? "Đang lưu..." : "Lưu thiết lập"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <Dialog open={lateModalOpen} handler={() => setLateModalOpen(false)} size="sm">
         <DialogHeader className="border-b border-gray-100">

@@ -3,6 +3,12 @@ import database from "../config/db.js";
 const LOCAL_NOW_SQL = "(UTC_TIMESTAMP() + INTERVAL 7 HOUR)";
 const TODAY_SQL = `DATE(${LOCAL_NOW_SQL})`;
 const VIETNAM_TIMEZONE_OFFSET = "+07:00";
+const DEFAULT_ATTENDANCE_SETTINGS = {
+  require_gps: false,
+  workplace_latitude: null,
+  workplace_longitude: null,
+  allowed_radius_meters: 300,
+};
 
 function toVietnamDateTime(date, time) {
   if (!date || !time) return null;
@@ -145,6 +151,160 @@ async function ensureLateRequestTable() {
       INDEX idx_late_request_status (status)
     )`
   );
+}
+
+async function ensureAttendanceSettings() {
+  await database.query(
+    `CREATE TABLE IF NOT EXISTS attendance_settings (
+      setting_key VARCHAR(80) PRIMARY KEY,
+      setting_value VARCHAR(255) NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`
+  );
+
+  const defaults = {
+    require_gps: "false",
+    workplace_latitude: "",
+    workplace_longitude: "",
+    allowed_radius_meters: String(DEFAULT_ATTENDANCE_SETTINGS.allowed_radius_meters),
+  };
+
+  for (const [key, value] of Object.entries(defaults)) {
+    await database.query(
+      `INSERT INTO attendance_settings (setting_key, setting_value)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE setting_value = setting_value`,
+      [key, value]
+    );
+  }
+}
+
+async function ensureAttendanceLocationColumns() {
+  const columns = [
+    ["check_in_latitude", "DOUBLE NULL"],
+    ["check_in_longitude", "DOUBLE NULL"],
+    ["check_in_accuracy", "DOUBLE NULL"],
+    ["check_out_latitude", "DOUBLE NULL"],
+    ["check_out_longitude", "DOUBLE NULL"],
+    ["check_out_accuracy", "DOUBLE NULL"],
+  ];
+
+  for (const [column, definition] of columns) {
+    try {
+      await database.query(`ALTER TABLE attendance ADD COLUMN ${column} ${definition}`);
+    } catch (error) {
+      if (!String(error.message || "").includes("Duplicate column")) {
+        throw error;
+      }
+    }
+  }
+}
+
+async function getAttendanceSettingsValue() {
+  await ensureAttendanceSettings();
+  const [rows] = await database.query(
+    "SELECT setting_key, setting_value FROM attendance_settings"
+  );
+  const values = Object.fromEntries(rows.map((row) => [row.setting_key, row.setting_value]));
+  const latitude =
+    values.workplace_latitude === "" || values.workplace_latitude === undefined
+      ? null
+      : Number(values.workplace_latitude);
+  const longitude =
+    values.workplace_longitude === "" || values.workplace_longitude === undefined
+      ? null
+      : Number(values.workplace_longitude);
+  const radius = Number(values.allowed_radius_meters);
+
+  return {
+    require_gps: values.require_gps === "true",
+    workplace_latitude: latitude !== null && Number.isFinite(latitude) ? latitude : null,
+    workplace_longitude: longitude !== null && Number.isFinite(longitude) ? longitude : null,
+    allowed_radius_meters:
+      Number.isFinite(radius) && radius > 0
+        ? radius
+        : DEFAULT_ATTENDANCE_SETTINGS.allowed_radius_meters,
+  };
+}
+
+function parseCoordinate(value, min, max) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) return undefined;
+  return number;
+}
+
+function parseGpsPayload(body) {
+  const latitude = parseCoordinate(body.latitude, -90, 90);
+  const longitude = parseCoordinate(body.longitude, -180, 180);
+  const accuracy = body.accuracy === "" || body.accuracy === null || body.accuracy === undefined
+    ? null
+    : Number(body.accuracy);
+
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0))
+  ) {
+    return { valid: false };
+  }
+
+  return {
+    valid: true,
+    latitude,
+    longitude,
+    accuracy,
+  };
+}
+
+function distanceMeters(pointA, pointB) {
+  const earthRadius = 6371000;
+  const toRad = (degree) => (degree * Math.PI) / 180;
+  const dLat = toRad(pointB.latitude - pointA.latitude);
+  const dLng = toRad(pointB.longitude - pointA.longitude);
+  const lat1 = toRad(pointA.latitude);
+  const lat2 = toRad(pointB.latitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function validateGpsForAttendance(settings, gps) {
+  if (!settings.require_gps) return { ok: true };
+
+  if (!gps.valid || gps.latitude === null || gps.longitude === null) {
+    return {
+      ok: false,
+      message: "Can lay vi tri GPS truoc khi cham cong",
+    };
+  }
+
+  const hasWorkplace =
+    settings.workplace_latitude !== null && settings.workplace_longitude !== null;
+
+  if (!hasWorkplace) return { ok: true };
+
+  const distance = distanceMeters(
+    {
+      latitude: settings.workplace_latitude,
+      longitude: settings.workplace_longitude,
+    },
+    {
+      latitude: gps.latitude,
+      longitude: gps.longitude,
+    }
+  );
+  const effectiveDistance = distance - Number(gps.accuracy || 0);
+
+  if (effectiveDistance > settings.allowed_radius_meters) {
+    return {
+      ok: false,
+      message: `Ban dang o ngoai pham vi cham cong (${Math.round(distance)}m)`,
+    };
+  }
+
+  return { ok: true };
 }
 
 async function notifyAdmins({ type, message, refId = null, dedupe = false }) {
@@ -426,9 +586,70 @@ export async function getAttendanceHistory(req, res) {
   }
 }
 
+export async function getAttendanceSettings(req, res) {
+  try {
+    const settings = await getAttendanceSettingsValue();
+    res.json({ settings });
+  } catch (error) {
+    console.error("[getAttendanceSettings] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function updateAttendanceSettings(req, res) {
+  try {
+    const user = await getCurrentUser(req.user?.user_id);
+
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Chi admin co the thiet lap cham cong" });
+    }
+
+    const requireGps = Boolean(req.body.require_gps);
+    const latitude = parseCoordinate(req.body.workplace_latitude, -90, 90);
+    const longitude = parseCoordinate(req.body.workplace_longitude, -180, 180);
+    const radius = Number(req.body.allowed_radius_meters);
+
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ message: "Toa do GPS khong hop le" });
+    }
+
+    if (!Number.isFinite(radius) || radius < 20 || radius > 5000) {
+      return res.status(400).json({ message: "Ban kinh hop le tu 20m den 5000m" });
+    }
+
+    if ((latitude === null) !== (longitude === null)) {
+      return res.status(400).json({ message: "Can nhap ca vi do va kinh do" });
+    }
+
+    await ensureAttendanceSettings();
+    const entries = {
+      require_gps: requireGps ? "true" : "false",
+      workplace_latitude: latitude === null ? "" : String(latitude),
+      workplace_longitude: longitude === null ? "" : String(longitude),
+      allowed_radius_meters: String(Math.round(radius)),
+    };
+
+    for (const [key, value] of Object.entries(entries)) {
+      await database.query(
+        `INSERT INTO attendance_settings (setting_key, setting_value)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+        [key, value]
+      );
+    }
+
+    const settings = await getAttendanceSettingsValue();
+    res.json({ message: "Da luu thiet lap cham cong", settings });
+  } catch (error) {
+    console.error("[updateAttendanceSettings] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
 export async function markAttendance(req, res) {
   try {
     await ensureLateRequestTable();
+    await ensureAttendanceLocationColumns();
     const user = await getCurrentUser(req.user?.user_id);
 
     if (!user) {
@@ -437,6 +658,9 @@ export async function markAttendance(req, res) {
 
     const employee = await getEmployeeByUserId(user.user_id);
     const { schedule_id, action } = req.body;
+    const gps = parseGpsPayload(req.body || {});
+    const settings = await getAttendanceSettingsValue();
+    const gpsValidation = validateGpsForAttendance(settings, gps);
 
     if (!employee) {
       return res.status(403).json({ message: "Khong tim thay ho so nhan vien" });
@@ -444,6 +668,10 @@ export async function markAttendance(req, res) {
 
     if (!schedule_id || !["check_in", "check_out"].includes(action)) {
       return res.status(400).json({ message: "schedule_id va action khong hop le" });
+    }
+
+    if (!gpsValidation.ok) {
+      return res.status(400).json({ message: gpsValidation.message });
     }
 
     const todaySchedules = await getTodaySchedulesForEmployee(employee.employee_id);
@@ -503,15 +731,40 @@ export async function markAttendance(req, res) {
         if (existing) {
           await database.query(
             `UPDATE attendance
-             SET check_in = ${LOCAL_NOW_SQL}, status = ?
+             SET check_in = ${LOCAL_NOW_SQL},
+                 status = ?,
+                 check_in_latitude = ?,
+                 check_in_longitude = ?,
+                 check_in_accuracy = ?
              WHERE attendance_id = ?`,
-            [attendanceStatus, existing.attendance_id]
+            [
+              attendanceStatus,
+              gps.latitude,
+              gps.longitude,
+              gps.accuracy,
+              existing.attendance_id,
+            ]
           );
         } else {
           await database.query(
-            `INSERT INTO attendance (employee_id, schedule_id, check_in, status)
-             VALUES (?, ?, ${LOCAL_NOW_SQL}, ?)`,
-            [employee.employee_id, groupSchedule.schedule_id, attendanceStatus]
+            `INSERT INTO attendance (
+              employee_id,
+              schedule_id,
+              check_in,
+              status,
+              check_in_latitude,
+              check_in_longitude,
+              check_in_accuracy
+            )
+             VALUES (?, ?, ${LOCAL_NOW_SQL}, ?, ?, ?, ?)`,
+            [
+              employee.employee_id,
+              groupSchedule.schedule_id,
+              attendanceStatus,
+              gps.latitude,
+              gps.longitude,
+              gps.accuracy,
+            ]
           );
         }
       }
@@ -535,9 +788,12 @@ export async function markAttendance(req, res) {
 
     await database.query(
       `UPDATE attendance
-       SET check_out = ${LOCAL_NOW_SQL}
+       SET check_out = ${LOCAL_NOW_SQL},
+           check_out_latitude = ?,
+           check_out_longitude = ?,
+           check_out_accuracy = ?
        WHERE schedule_id IN (${schedulePlaceholders})`,
-      scheduleIds
+      [gps.latitude, gps.longitude, gps.accuracy, ...scheduleIds]
     );
 
     res.json({ message: "Da ghi nhan cham cong ra" });
