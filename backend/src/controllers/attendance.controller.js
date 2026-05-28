@@ -3,6 +3,7 @@ import database from "../config/db.js";
 const LOCAL_NOW_SQL = "(UTC_TIMESTAMP() + INTERVAL 7 HOUR)";
 const TODAY_SQL = `DATE(${LOCAL_NOW_SQL})`;
 const VIETNAM_TIMEZONE_OFFSET = "+07:00";
+const OVERNIGHT_VISIBILITY_GRACE_HOURS = 2;
 const DEFAULT_ATTENDANCE_SETTINGS = {
   require_gps: false,
   workplace_latitude: null,
@@ -56,6 +57,19 @@ function getAttendanceBucket(record) {
   return "ON_TIME";
 }
 
+const TODAY_OR_RECENT_OVERNIGHT_WHERE = `
+  AND (
+    s.work_date = ${TODAY_SQL}
+    OR (
+      s.work_date = DATE_SUB(${TODAY_SQL}, INTERVAL 1 DAY)
+      AND sh.end_time <= sh.start_time
+      AND DATE_ADD(
+        DATE_ADD(TIMESTAMP(s.work_date, sh.end_time), INTERVAL 1 DAY),
+        INTERVAL ${OVERNIGHT_VISIBILITY_GRACE_HOURS} HOUR
+      ) >= ${LOCAL_NOW_SQL}
+    )
+  )`;
+
 async function getTodaySchedulesForEmployee(employeeId) {
   const [schedules] = await database.query(
     `SELECT
@@ -71,7 +85,7 @@ async function getTodaySchedulesForEmployee(employeeId) {
      JOIN shifts sh ON s.shift_id = sh.shift_id
      WHERE s.employee_id = ?
        AND s.status = 'PUBLISHED'
-       AND s.work_date = ${TODAY_SQL}`,
+       ${TODAY_OR_RECENT_OVERNIGHT_WHERE}`,
     [employeeId]
   );
 
@@ -335,7 +349,7 @@ function validateGpsForAttendance(settings, gps) {
   if (!gps.valid || gps.latitude === null || gps.longitude === null) {
     return {
       ok: false,
-      message: "Can lay vi tri GPS truoc khi cham cong",
+      message: "Cần lấy vị trí GPS trước khi chấm công",
     };
   }
 
@@ -359,7 +373,7 @@ function validateGpsForAttendance(settings, gps) {
   if (effectiveDistance > settings.allowed_radius_meters) {
     return {
       ok: false,
-      message: `Ban dang o ngoai pham vi cham cong (${Math.round(distance)}m)`,
+      message: `Bạn đang ở ngoài phạm vi chấm công: cách nơi làm việc khoảng ${Math.round(distance)}m, bán kính cho phép ${Math.round(settings.allowed_radius_meters)}m.`,
     };
   }
 
@@ -551,7 +565,7 @@ export async function getTodayAttendance(req, res) {
     }
 
     const params = [];
-    let where = `AND s.work_date = ${TODAY_SQL}`;
+    let where = TODAY_OR_RECENT_OVERNIGHT_WHERE;
 
     if (user.role !== "ADMIN") {
       const employee = await getEmployeeByUserId(user.user_id);
@@ -660,7 +674,7 @@ export async function updateAttendanceSettings(req, res) {
     const user = await getCurrentUser(req.user?.user_id);
 
     if (!user || user.role !== "ADMIN") {
-      return res.status(403).json({ message: "Chi admin co the thiet lap cham cong" });
+      return res.status(403).json({ message: "Chỉ admin mới có thể thiết lập chấm công" });
     }
 
     const requireGps = Boolean(req.body.require_gps);
@@ -669,15 +683,15 @@ export async function updateAttendanceSettings(req, res) {
     const radius = Number(req.body.allowed_radius_meters);
 
     if (latitude === undefined || longitude === undefined) {
-      return res.status(400).json({ message: "Toa do GPS khong hop le" });
+      return res.status(400).json({ message: "Tọa độ GPS không hợp lệ" });
     }
 
     if (!Number.isFinite(radius) || radius < 20 || radius > 5000) {
-      return res.status(400).json({ message: "Ban kinh hop le tu 20m den 5000m" });
+      return res.status(400).json({ message: "Bán kính hợp lệ từ 20m đến 5000m" });
     }
 
     if ((latitude === null) !== (longitude === null)) {
-      return res.status(400).json({ message: "Can nhap ca vi do va kinh do" });
+      return res.status(400).json({ message: "Cả vĩ độ và kinh độ đều phải được cung cấp hoặc bỏ trống" });
     }
 
     await ensureAttendanceSettings();
@@ -698,7 +712,7 @@ export async function updateAttendanceSettings(req, res) {
     }
 
     const settings = await getAttendanceSettingsValue();
-    res.json({ message: "Da luu thiet lap cham cong", settings });
+    res.json({ message: "Đã lưu thiết lập chấm công", settings });
   } catch (error) {
     console.error("[updateAttendanceSettings] Error:", error);
     res.status(500).json({ message: error.message });
@@ -717,7 +731,7 @@ export async function getLateRequestOptions(req, res) {
     const employee = await getEmployeeByUserId(user.user_id);
 
     if (!employee) {
-      return res.status(403).json({ message: "Khong tim thay ho so nhan vien" });
+      return res.status(403).json({ message: "Không tìm thấy hồ sơ nhân viên" });
     }
 
     const now = new Date();
@@ -889,7 +903,7 @@ export async function markAttendance(req, res) {
 
       await notifyAttendanceCheckIn(schedule, attendanceStatus);
 
-      return res.json({ message: "Da ghi nhan cham cong vao", status: attendanceStatus });
+      return res.json({ message: "Đã ghi nhận chấm công vào", status: attendanceStatus });
     }
 
     if (!existingRows.length || existingRows.some((row) => !row.check_in)) {
@@ -914,7 +928,7 @@ export async function markAttendance(req, res) {
       [gps.latitude, gps.longitude, gps.accuracy, ...scheduleIds]
     );
 
-    res.json({ message: "Da ghi nhan cham cong ra" });
+    res.json({ message: "Đã ghi nhận chấm công ra" });
   } catch (error) {
     console.error("[markAttendance] Error:", error);
     res.status(500).json({ message: error.message });

@@ -183,13 +183,22 @@ function getCurrentPosition() {
   });
 }
 
+function notifyPopup(type, title, message) {
+  if (window.appPopup) {
+    window.appPopup({ type, title, message });
+    return;
+  }
+
+  alert(message || title);
+}
+
 export default function AttendancePage() {
   const role = getRole();
   const isAdmin = role === "ADMIN";
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
   const [now, setNow] = useState(new Date());
   const [currentDay, setCurrentDay] = useState(() => formatDate(new Date()));
   const [lateModalOpen, setLateModalOpen] = useState(false);
@@ -334,14 +343,24 @@ export default function AttendancePage() {
       setActionLoading(`${scheduleId}-${action}`);
       setError("");
       const locationPayload = await resolveAttendanceLocation();
-      await axios.post(
+      const res = await axios.post(
         `${API_URL}/attendance/mark`,
         { schedule_id: scheduleId, action, ...locationPayload },
         { headers: authHeaders() },
       );
       await fetchToday();
+      notifyPopup(
+        "success",
+        action === "check_in" ? "Đã chấm vào" : "Đã chấm ra",
+        res.data?.message || "Chấm công thành công.",
+      );
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể ghi nhận chấm công");
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        "Không thể ghi nhận chấm công";
+      setError(message);
+      notifyPopup("error", "Không thể chấm công", message);
     } finally {
       setActionLoading(null);
     }
@@ -357,8 +376,15 @@ export default function AttendancePage() {
         workplace_latitude: String(position.coords.latitude),
         workplace_longitude: String(position.coords.longitude),
       }));
+      notifyPopup(
+        "success",
+        "Đã lấy vị trí",
+        `Vĩ độ ${position.coords.latitude.toFixed(6)}, kinh độ ${position.coords.longitude.toFixed(6)}.`,
+      );
     } catch (err) {
-      setError(err.message || "Không thể lấy vị trí hiện tại");
+      const message = err.message || "Không thể lấy vị trí hiện tại";
+      setError(message);
+      notifyPopup("error", "Không thể lấy vị trí", message);
     } finally {
       setLocationLoading(false);
     }
@@ -377,8 +403,16 @@ export default function AttendancePage() {
       setAttendanceSettings(nextSettings);
       setSettingsForm(nextSettings);
       setSettingsModalOpen(false);
+      notifyPopup(
+        "success",
+        "Đã lưu thiết lập",
+        res.data?.message || "Thiết lập chấm công đã được cập nhật.",
+      );
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể lưu thiết lập chấm công");
+      const message =
+        err.response?.data?.message || "Không thể lưu thiết lập chấm công";
+      setError(message);
+      notifyPopup("error", "Lưu thiết lập thất bại", message);
     } finally {
       setSettingsLoading(false);
     }
@@ -514,12 +548,6 @@ export default function AttendancePage() {
           </Button>
         </div>
       </div>
-
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-          {error}
-        </div>
-      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
