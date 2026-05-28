@@ -498,9 +498,7 @@ export default function StatisticsPage() {
     const completed = attendance.filter((item) => item.check_in && item.check_out).length;
     const late = attendance.filter((item) => item.attendance_status === "LATE").length;
     const missing = attendance.filter((item) => !item.check_in).length;
-    const early = payrollDetails.filter((item) => n(item.early_leave_minutes) > 0).length;
     const lateMinutes = payrollDetails.reduce((sum, item) => sum + n(item.late_minutes), 0);
-    const earlyMinutes = payrollDetails.reduce((sum, item) => sum + n(item.early_leave_minutes), 0);
     const byDay = [...countBy(attendance.filter((item) => item.check_in), (item) => String(item.check_in).slice(8, 10)).entries()]
       .map(([label, value]) => ({ label, value }))
       .slice(-14);
@@ -512,9 +510,7 @@ export default function StatisticsPage() {
       completed,
       late,
       missing,
-      early,
       lateMinutes,
-      earlyMinutes,
       byDay,
       byHour,
       attendanceRate: percent(checkedIn, attendance.length),
@@ -655,9 +651,9 @@ export default function StatisticsPage() {
             />
             <Metric
               icon={ExclamationTriangleIcon}
-              label="Trễ / về sớm"
-              value={`${fmt(attendanceStats.late)} / ${fmt(attendanceStats.early)}`}
-              helper={`${fmt(attendanceStats.lateMinutes)} phút trễ, ${fmt(attendanceStats.earlyMinutes)} phút về sớm`}
+              label="Đi trễ"
+              value={fmt(attendanceStats.late)}
+              helper={`${fmt(attendanceStats.lateMinutes)} phút trễ được ghi nhận`}
               tone="red"
             />
           </div>

@@ -30,6 +30,10 @@ function formatTime(value) {
 
 function attendanceChip(record) {
   if (!record.check_in) {
+    if (record.attendance_bucket === "UPCOMING" || record.progress_status === "UPCOMING") {
+      return { label: "Chưa làm", color: "blue" };
+    }
+
     return { label: "Chưa chấm", color: "gray" };
   }
 
@@ -142,12 +146,13 @@ export default function AttendanceHistoryPage() {
       visibleRecords.reduce(
         (acc, record) => {
           acc.total += 1;
-          if (!record.check_in) acc.missing += 1;
+          if (record.attendance_bucket === "UPCOMING" || record.progress_status === "UPCOMING") acc.upcoming += 1;
+          else if (!record.check_in) acc.missing += 1;
           else if (record.attendance_status === "LATE") acc.late += 1;
           else acc.on_time += 1;
           return acc;
         },
-        { total: 0, on_time: 0, late: 0, missing: 0 },
+        { total: 0, on_time: 0, late: 0, missing: 0, upcoming: 0 },
       ),
     [visibleRecords],
   );
@@ -320,12 +325,13 @@ export default function AttendanceHistoryPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         {[
           ["Tổng ca", displayStats.total, "text-gray-950"],
           ["Đúng giờ", displayStats.on_time, "text-green-600"],
           ["Đi trễ", displayStats.late, "text-orange-600"],
           ["Chưa chấm", displayStats.missing, "text-gray-600"],
+          ["Chưa làm", displayStats.upcoming, "text-blue-600"],
         ].map(([label, value, color]) => (
           <Card key={label} className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
             <Typography className="text-sm font-semibold text-gray-500">{label}</Typography>

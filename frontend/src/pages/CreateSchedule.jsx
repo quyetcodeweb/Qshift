@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   AdjustmentsHorizontalIcon,
@@ -133,7 +133,9 @@ function hasTimeOverlap(aStart, aEnd, bStart, bEnd) {
   const first = timeRanges(aStart, aEnd);
   const second = timeRanges(bStart, bEnd);
   return first.some(([start, end]) =>
-    second.some(([otherStart, otherEnd]) => start < otherEnd && otherStart < end),
+    second.some(
+      ([otherStart, otherEnd]) => start < otherEnd && otherStart < end,
+    ),
   );
 }
 
@@ -394,7 +396,9 @@ export default function CreateSchedule() {
       fetchSchedules(String(Number(month)), year);
       window.appPopup?.({
         type: "success",
-        title: editingSchedule ? "Đã cập nhật ca làm" : "Đã thêm ca làm thủ công",
+        title: editingSchedule
+          ? "Đã cập nhật ca làm"
+          : "Đã thêm ca làm thủ công",
         message: `${employee?.name || "Nhân viên"} - ${shift?.shift_name || "Ca làm"} vào ngày ${formatDate(payload.work_date)}.`,
         duration: 6000,
       });
@@ -411,8 +415,7 @@ export default function CreateSchedule() {
       cancelText: "Giữ lại",
       type: "warning",
     });
-    if (!confirmed)
-      return;
+    if (!confirmed) return;
     try {
       await axios.delete(`${API_URL}/schedules/${schedule.schedule_id}`, {
         headers: authHeaders(),
@@ -519,8 +522,7 @@ export default function CreateSchedule() {
       cancelText: "Giữ lại",
       type: "warning",
     });
-    if (!confirmed)
-      return;
+    if (!confirmed) return;
     try {
       await axios.delete(`${API_URL}/shifts/${shift.shift_id}`, {
         headers: authHeaders(),
@@ -1164,7 +1166,7 @@ export default function CreateSchedule() {
           </Button>
           <Button
             onClick={saveSchedule}
-            className="rounded-md bg-gray-950 normal-case"
+            className="rounded-md bg-green-500 normal-case"
           >
             Lưu ca làm
           </Button>
@@ -1258,7 +1260,7 @@ export default function CreateSchedule() {
           </Button>
           <Button
             onClick={saveShift}
-            className="rounded-md bg-gray-950 normal-case"
+            className="rounded-md bg-green-300 normal-case"
           >
             Lưu loại ca
           </Button>
@@ -1322,7 +1324,7 @@ export default function CreateSchedule() {
           </Button>
           <Button
             onClick={saveSettings}
-            className="rounded-md bg-gray-950 normal-case"
+            className="rounded-md bg-green-500 normal-case"
           >
             Lưu cài đặt
           </Button>

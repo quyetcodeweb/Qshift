@@ -20,6 +20,36 @@ function getShiftBounds(schedule) {
   return { start, end };
 }
 
+function getAttendanceProgressStatus(record, attendance) {
+  if (attendance.check_in) {
+    return attendance.check_out ? "COMPLETED" : "CHECKED_IN";
+  }
+
+  const { start } = getShiftBounds(record);
+
+  if (start && start > new Date()) {
+    return "UPCOMING";
+  }
+
+  return "NOT_CHECKED_IN";
+}
+
+function getAttendanceBucket(record) {
+  if (!record.check_in && record.progress_status === "UPCOMING") {
+    return "UPCOMING";
+  }
+
+  if (!record.check_in) {
+    return "MISSING";
+  }
+
+  if (record.attendance_status === "LATE") {
+    return "LATE";
+  }
+
+  return "ON_TIME";
+}
+
 async function getTodaySchedulesForEmployee(employeeId) {
   const [schedules] = await database.query(
     `SELECT
@@ -272,20 +302,20 @@ async function getAttendanceRecords(extraWhere = "", params = [], orderBy = "") 
   return schedules.map((schedule) => {
     const shift = shiftByScheduleId.get(schedule.schedule_id) || {};
     const attendance = attendanceByScheduleId.get(schedule.schedule_id) || {};
-    const progressStatus = !attendance.check_in
-      ? "NOT_CHECKED_IN"
-      : !attendance.check_out
-        ? "CHECKED_IN"
-        : "COMPLETED";
-
-    return {
-      ...schedule,
-      ...shift,
+    const scheduleRecord = { ...schedule, ...shift };
+    const progressStatus = getAttendanceProgressStatus(scheduleRecord, attendance);
+    const record = {
+      ...scheduleRecord,
       attendance_id: attendance.attendance_id || null,
       check_in: attendance.check_in || null,
       check_out: attendance.check_out || null,
       attendance_status: attendance.attendance_status || null,
       progress_status: progressStatus,
+    };
+
+    return {
+      ...record,
+      attendance_bucket: getAttendanceBucket(record),
     };
   });
 }
@@ -356,7 +386,7 @@ export async function getAttendanceHistory(req, res) {
       if (!employee) {
         return res.json({
           records: [],
-          stats: { total: 0, on_time: 0, late: 0, missing: 0 },
+          stats: { total: 0, on_time: 0, late: 0, missing: 0, upcoming: 0 },
         });
       }
 
@@ -374,7 +404,9 @@ export async function getAttendanceHistory(req, res) {
       (acc, record) => {
         acc.total += 1;
 
-        if (!record.check_in) {
+        if (record.attendance_bucket === "UPCOMING") {
+          acc.upcoming += 1;
+        } else if (!record.check_in) {
           acc.missing += 1;
         } else if (record.attendance_status === "LATE") {
           acc.late += 1;
@@ -384,7 +416,7 @@ export async function getAttendanceHistory(req, res) {
 
         return acc;
       },
-      { total: 0, on_time: 0, late: 0, missing: 0 }
+      { total: 0, on_time: 0, late: 0, missing: 0, upcoming: 0 }
     );
 
     res.json({ records, stats });

@@ -100,6 +100,17 @@ function formatNumber(value, maximumFractionDigits = 0) {
   return Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits });
 }
 
+function isUpcomingAttendance(record) {
+  return (
+    !record.check_in &&
+    (record.attendance_bucket === "UPCOMING" || record.progress_status === "UPCOMING")
+  );
+}
+
+function isMissingAttendance(record) {
+  return !record.check_in && !isUpcomingAttendance(record);
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString(
@@ -227,7 +238,7 @@ function buildTrend(
       current.shifts += 1;
 
       if (record.check_in) current.completed += 1;
-      if (!record.check_in) current.missing += 1;
+      if (isMissingAttendance(record)) current.missing += 1;
       if (record.attendance_status === "LATE") current.late += 1;
 
       grouped.set(key, current);
@@ -255,7 +266,7 @@ function buildTrend(
       current.shifts += 1;
 
       if (record.check_in) current.completed += 1;
-      if (!record.check_in) current.missing += 1;
+      if (isMissingAttendance(record)) current.missing += 1;
       if (record.attendance_status === "LATE") current.late += 1;
 
       grouped.set(key, current);
@@ -713,18 +724,16 @@ export default function Dashboard() {
     const lateCount = attendanceRecords.filter(
       (record) => record.attendance_status === "LATE",
     ).length;
-    const missingCount = attendanceRecords.filter(
-      (record) => !record.check_in,
-    ).length;
+    const missingCount = attendanceRecords.filter(isMissingAttendance).length;
+    const upcomingCount = attendanceRecords.filter(isUpcomingAttendance).length;
     const completedCount = attendanceRecords.filter(
       (record) => record.check_in,
     ).length;
     const todayLate = todayAttendance.filter(
       (record) => record.attendance_status === "LATE",
     ).length;
-    const todayMissing = todayAttendance.filter(
-      (record) => !record.check_in,
-    ).length;
+    const todayMissing = todayAttendance.filter(isMissingAttendance).length;
+    const todayUpcoming = todayAttendance.filter(isUpcomingAttendance).length;
     const activeEmployees = employees.filter(isActiveEmployee).length;
 
     return {
@@ -734,13 +743,15 @@ export default function Dashboard() {
       totalHours,
       lateCount,
       missingCount,
+      upcomingCount,
       completedCount,
       todayLate,
       todayMissing,
+      todayUpcoming,
       leaveToday: 0,
       avgShifts: visibleStats.length ? totalShifts / visibleStats.length : 0,
       onTimeRate: attendanceRecords.length
-        ? ((attendanceRecords.length - lateCount - missingCount) /
+        ? ((attendanceRecords.length - lateCount - missingCount - upcomingCount) /
             attendanceRecords.length) *
           100
         : 0,
@@ -794,7 +805,7 @@ export default function Dashboard() {
       todayMissing: {
         label: "Nhân viên chưa chấm công",
         value: formatNumber(totals.todayMissing),
-        detail: "Tính trên ca hôm nay",
+        detail: `${formatNumber(totals.todayUpcoming)} ca chưa làm`,
         icon: BriefcaseIcon,
         tone: "slate",
       },
@@ -834,7 +845,7 @@ export default function Dashboard() {
       const key = Number(record.employee_id);
       const current = map.get(key) || { late: 0, missing: 0 };
       if (record.attendance_status === "LATE") current.late += 1;
-      if (!record.check_in) current.missing += 1;
+      if (isMissingAttendance(record)) current.missing += 1;
       map.set(key, current);
       return map;
     }, new Map());
@@ -1130,6 +1141,9 @@ export default function Dashboard() {
             </span>
             <span className="rounded-md bg-black px-1 py-0.5 text-white sm:px-3 sm:py-2">
               Chưa chấm công: {formatNumber(totals.missingCount)}
+            </span>
+            <span className="rounded-md bg-blue-50 px-1 py-0.5 text-blue-700 sm:px-3 sm:py-2">
+              Chưa làm: {formatNumber(totals.upcomingCount)}
             </span>
           </div>
 
