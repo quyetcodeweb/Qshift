@@ -14,6 +14,7 @@ import {
   saveDraftWithName,
   getDraftsList,
   getDraftDetail,
+  updateDraftByName,
   deleteDraftByName,
   createSingleSchedule,
   updateSingleSchedule,
@@ -32,6 +33,7 @@ router.post("/settings", verifyToken, saveScheduleSettings);
 router.get("/drafts/list", verifyToken, getDraftsList);
 router.get("/drafts/:draft_id", verifyToken, getDraftDetail);
 router.post("/drafts", verifyToken, saveDraftWithName);
+router.put("/drafts/:draft_id", verifyToken, updateDraftByName);
 router.delete("/drafts/:draft_id", verifyToken, deleteDraftByName);
 router.get("/drafts", verifyToken, getDrafts);
 router.delete("/draft/:id", verifyToken, deleteDraft);

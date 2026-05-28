@@ -166,19 +166,28 @@ export default function EmployeePage() {
     try {
       setLoading(true);
       const headers = authHeaders();
-      const [employeesRes, usersRes, todayRes, rolesRes] = await Promise.allSettled([
-        axios.get(`${API_URL}/employees`, { headers }),
-        axios.get(`${API_URL}/users`, { headers }),
-        axios.get(`${API_URL}/attendance/today`, { headers }),
-        axios.get(`${API_URL}/roles`, { headers }),
-      ]);
+      const [employeesRes, usersRes, todayRes, rolesRes] =
+        await Promise.allSettled([
+          axios.get(`${API_URL}/employees`, { headers }),
+          axios.get(`${API_URL}/users`, { headers }),
+          axios.get(`${API_URL}/attendance/today`, { headers }),
+          axios.get(`${API_URL}/roles`, { headers }),
+        ]);
 
       const employeeList =
-        employeesRes.status === "fulfilled" ? employeesRes.value.data || [] : [];
+        employeesRes.status === "fulfilled"
+          ? employeesRes.value.data || []
+          : [];
       setEmployees(employeeList);
-      setUsers(usersRes.status === "fulfilled" ? usersRes.value.data || [] : []);
-      setTodayAttendance(todayRes.status === "fulfilled" ? todayRes.value.data || [] : []);
-      setRoles(rolesRes.status === "fulfilled" ? rolesRes.value.data || [] : []);
+      setUsers(
+        usersRes.status === "fulfilled" ? usersRes.value.data || [] : [],
+      );
+      setTodayAttendance(
+        todayRes.status === "fulfilled" ? todayRes.value.data || [] : [],
+      );
+      setRoles(
+        rolesRes.status === "fulfilled" ? rolesRes.value.data || [] : [],
+      );
 
       if (!selectedRoleEmployee && employeeList.length > 0) {
         setSelectedRoleEmployee(String(employeeList[0].employee_id));
@@ -313,9 +322,12 @@ export default function EmployeePage() {
   const openEditForm = async (employee) => {
     let detail = employee;
     try {
-      const res = await axios.get(`${API_URL}/employees/${employee.employee_id}`, {
-        headers: authHeaders(),
-      });
+      const res = await axios.get(
+        `${API_URL}/employees/${employee.employee_id}`,
+        {
+          headers: authHeaders(),
+        },
+      );
       detail = res.data || employee;
     } catch (err) {
       console.error("[EmployeePage] Load employee detail:", err);
@@ -327,7 +339,9 @@ export default function EmployeePage() {
       email: detail.email || "",
       phone: detail.phone || "",
       address: detail.address || "",
-      birth_date: detail.birth_date ? String(detail.birth_date).slice(0, 10) : "",
+      birth_date: detail.birth_date
+        ? String(detail.birth_date).slice(0, 10)
+        : "",
       gender: detail.gender || "",
       emergency_contact: detail.emergency_contact || "",
       emergency_phone: detail.emergency_phone || "",
@@ -348,9 +362,13 @@ export default function EmployeePage() {
     try {
       if (editingEmployee) {
         const { password, ...employeePayload } = form;
-        await axios.put(`${API_URL}/employees/${editingEmployee.employee_id}`, employeePayload, {
-          headers: authHeaders(),
-        });
+        await axios.put(
+          `${API_URL}/employees/${editingEmployee.employee_id}`,
+          employeePayload,
+          {
+            headers: authHeaders(),
+          },
+        );
 
         const user = usersByEmployeeId.get(Number(editingEmployee.employee_id));
         if (password && user) {
@@ -465,7 +483,11 @@ export default function EmployeePage() {
       );
       setSelectedRole("");
       fetchEmployeeRoles();
-      window.appPopup?.({ type: "success", title: "Đã thêm vai trò", message: "Vai trò đã được gán cho nhân viên." });
+      window.appPopup?.({
+        type: "success",
+        title: "Đã thêm vai trò",
+        message: "Vai trò đã được gán cho nhân viên.",
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể thêm vai trò");
     }
@@ -489,7 +511,11 @@ export default function EmployeePage() {
         },
       );
       fetchEmployeeRoles();
-      window.appPopup?.({ type: "success", title: "Đã xóa vai trò", message: "Vai trò đã được gỡ khỏi nhân viên." });
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa vai trò",
+        message: "Vai trò đã được gỡ khỏi nhân viên.",
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa vai trò");
     }
@@ -515,7 +541,11 @@ export default function EmployeePage() {
         headers: authHeaders(),
       });
       setRoles(res.data || []);
-      window.appPopup?.({ type: "success", title: "Đã tạo vai trò", message: `Vai trò ${newRoleName.trim()} đã được tạo.` });
+      window.appPopup?.({
+        type: "success",
+        title: "Đã tạo vai trò",
+        message: `Vai trò ${newRoleName.trim()} đã được tạo.`,
+      });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể tạo vai trò");
     }
@@ -807,10 +837,7 @@ export default function EmployeePage() {
                         "Nguoi lien he khan cap",
                         selectedEmployee.emergency_contact || "-",
                       ],
-                      [
-                        "SDT khan cap",
-                        selectedEmployee.emergency_phone || "-",
-                      ],
+                      ["SDT khan cap", selectedEmployee.emergency_phone || "-"],
                       ["Số điện thoại", selectedEmployee.phone || "-"],
                       [
                         "Trạng thái hồ sơ",
@@ -1009,10 +1036,10 @@ export default function EmployeePage() {
           </div>
 
           {!editingEmployee && (
-          <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-medium text-blue-800">
-            Tên đăng nhập là số điện thoại. Mật khẩu mặc định là chữ A kèm 5 số
-            cuối của số điện thoại.
-          </div>
+            <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-medium text-blue-800">
+              Tên đăng nhập là số điện thoại. Mật khẩu mặc định là chữ A kèm 5
+              số cuối của số điện thoại.
+            </div>
           )}
           {editingEmployee && (
             <div className="rounded-md border border-amber-100 bg-amber-50 p-4 text-sm font-medium text-amber-800">
@@ -1056,7 +1083,7 @@ export default function EmployeePage() {
                 <Button
                   size="sm"
                   onClick={() => setCreateRoleOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-950 p-0"
+                  className="flex h-10 w-10 items-center justify-center rounded-md bg-green-500 p-0"
                   aria-label="Thêm vai trò"
                 >
                   <PlusIcon className="h-5 w-5" />
@@ -1092,7 +1119,9 @@ export default function EmployeePage() {
                           <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                           <input
                             value={roleEmployeeSearch}
-                            onChange={(event) => setRoleEmployeeSearch(event.target.value)}
+                            onChange={(event) =>
+                              setRoleEmployeeSearch(event.target.value)
+                            }
                             placeholder="Tìm tên, email, SĐT..."
                             className="h-10 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-600"
                           />
@@ -1103,19 +1132,26 @@ export default function EmployeePage() {
                               key={employee.employee_id}
                               type="button"
                               onClick={() => {
-                                setSelectedRoleEmployee(String(employee.employee_id));
+                                setSelectedRoleEmployee(
+                                  String(employee.employee_id),
+                                );
                                 setRoleEmployeePickerOpen(false);
                                 setRoleEmployeeSearch("");
                               }}
                               className={`w-full rounded-md px-3 py-2 text-left transition ${
-                                String(employee.employee_id) === selectedRoleEmployee
+                                String(employee.employee_id) ===
+                                selectedRoleEmployee
                                   ? "bg-blue-50 text-blue-700"
                                   : "text-gray-700 hover:bg-gray-50"
                               }`}
                             >
-                              <div className="truncate text-sm font-bold">{employee.name}</div>
+                              <div className="truncate text-sm font-bold">
+                                {employee.name}
+                              </div>
                               <div className="truncate text-xs font-medium text-gray-500">
-                                {employee.email || employee.phone || `NV-${employee.employee_id}`}
+                                {employee.email ||
+                                  employee.phone ||
+                                  `NV-${employee.employee_id}`}
                               </div>
                             </button>
                           ))}

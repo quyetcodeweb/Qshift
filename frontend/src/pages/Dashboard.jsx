@@ -103,7 +103,8 @@ function formatNumber(value, maximumFractionDigits = 0) {
 function isUpcomingAttendance(record) {
   return (
     !record.check_in &&
-    (record.attendance_bucket === "UPCOMING" || record.progress_status === "UPCOMING")
+    (record.attendance_bucket === "UPCOMING" ||
+      record.progress_status === "UPCOMING")
   );
 }
 
@@ -751,7 +752,10 @@ export default function Dashboard() {
       leaveToday: 0,
       avgShifts: visibleStats.length ? totalShifts / visibleStats.length : 0,
       onTimeRate: attendanceRecords.length
-        ? ((attendanceRecords.length - lateCount - missingCount - upcomingCount) /
+        ? ((attendanceRecords.length -
+            lateCount -
+            missingCount -
+            upcomingCount) /
             attendanceRecords.length) *
           100
         : 0,
@@ -1003,7 +1007,10 @@ export default function Dashboard() {
       <div className="grid gap-1.5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="rounded-md border border-gray-200 bg-white p-2 shadow-sm sm:p-5">
           <div>
-            <Typography variant="h6" className="text-sm font-bold text-gray-950 sm:text-lg">
+            <Typography
+              variant="h6"
+              className="text-sm font-bold text-gray-950 sm:text-lg"
+            >
               Năng suất nhân viên
             </Typography>
           </div>
@@ -1347,7 +1354,7 @@ export default function Dashboard() {
               <Button
                 onClick={saveCards}
                 disabled={draftCards.length !== 4}
-                className="rounded-md bg-gray-950 normal-case"
+                className="rounded-md bg-green-500 normal-case text-white hover:bg-green-600"
               >
                 Lưu thay đổi
               </Button>

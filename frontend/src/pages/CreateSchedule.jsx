@@ -1082,7 +1082,7 @@ export default function CreateSchedule() {
               </Button>
               <Button
                 onClick={saveSchedule}
-                className="rounded-md bg-gray-950 normal-case"
+                className="rounded-md bg-green-500 normal-case"
               >
                 Lưu thay đổi
               </Button>

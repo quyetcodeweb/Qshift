@@ -711,6 +711,8 @@ export async function getDraftDetail(req, res) {
         e.name as employee_name,
         dsi.shift_id,
         sh.shift_name,
+        TIME_FORMAT(sh.start_time, '%H:%i:%s') as start_time,
+        TIME_FORMAT(sh.end_time, '%H:%i:%s') as end_time,
         dsi.work_date,
         dsi.role_id,
         r.role_name
@@ -731,6 +733,77 @@ export async function getDraftDetail(req, res) {
     });
   } catch (error) {
     console.error("[getDraftDetail] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function updateDraftByName(req, res) {
+  try {
+    await ensureDraftTables();
+
+    const { draft_id } = req.params;
+    const { name, month, year, shifts } = req.body;
+
+    if (!name || !month || !year || !Array.isArray(shifts)) {
+      return res.status(400).json({ message: "name, month, year, shifts are required" });
+    }
+
+    const connection = await database.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [existing] = await connection.query(
+        "SELECT draft_id FROM draft_schedules WHERE draft_id = ?",
+        [draft_id]
+      );
+
+      if (!existing.length) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Draft not found" });
+      }
+
+      await connection.query(
+        `UPDATE draft_schedules
+         SET name = ?, month = ?, year = ?
+         WHERE draft_id = ?`,
+        [name, month, year, draft_id]
+      );
+
+      await connection.query(
+        "DELETE FROM draft_schedule_items WHERE draft_id = ?",
+        [draft_id]
+      );
+
+      for (const shift of shifts) {
+        const {
+          employee_id,
+          shift_id,
+          work_date,
+          role_id = null,
+        } = shift;
+
+        if (!employee_id || !shift_id || !work_date) {
+          continue;
+        }
+
+        await connection.query(
+          `INSERT INTO draft_schedule_items (draft_id, employee_id, shift_id, work_date, role_id)
+           VALUES (?, ?, ?, ?, ?)`,
+          [draft_id, employee_id, shift_id, String(work_date).slice(0, 10), role_id || null]
+        );
+      }
+
+      await connection.commit();
+      res.json({ message: "Bản nháp đã được cập nhật", count: shifts.length });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("[updateDraftByName] Error:", error);
     res.status(500).json({ message: error.message });
   }
 }
