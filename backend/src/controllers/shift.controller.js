@@ -30,8 +30,8 @@ export const updateShift = async (req, res) => {
 export const deleteShift = async (req, res) => {
   try {
     await shiftService.removeShift(req.params.id);
-    res.json({ message: "Xóa ca và dữ liệu liên quan thành công" });
+    res.json({ message: "Đã xóa ca làm và toàn bộ dữ liệu liên quan" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 };

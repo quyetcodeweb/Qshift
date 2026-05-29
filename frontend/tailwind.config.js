@@ -1,4 +1,5 @@
 import withMT from "@material-tailwind/react/utils/withMT";
+import defaultTheme from "tailwindcss/defaultTheme";
 
 const safeColors = [
   "gray",
@@ -34,7 +35,16 @@ export default withMT({
     ]),
   ]),
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: [
+          "Segoe UI",
+          "Arial",
+          "Tahoma",
+          ...defaultTheme.fontFamily.sans,
+        ],
+      },
+    },
   },
   plugins: [],
 });

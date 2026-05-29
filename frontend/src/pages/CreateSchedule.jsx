@@ -517,8 +517,8 @@ export default function CreateSchedule() {
   const deleteShift = async (shift) => {
     const confirmed = await window.appConfirm?.({
       title: "Xóa loại ca",
-      message: `Xóa ca "${shift.shift_name}"? Lịch làm liên quan cũng sẽ bị xóa.`,
-      confirmText: "Xóa",
+      message: `Xóa ca "${shift.shift_name}" (${formatTime(shift.start_time)} - ${formatTime(shift.end_time)})?\n\nDữ liệu liên quan sẽ bị xóa vĩnh viễn:\n- Lịch làm đã xếp\n- Dữ liệu chấm công và xử lý lương theo ca\n- Yêu cầu đổi ca / xin trễ liên quan\n- Lịch rảnh nhân viên\n- Ràng buộc vai trò và bản nháp lịch`,
+      confirmText: "Xóa tất cả",
       cancelText: "Giữ lại",
       type: "warning",
     });
@@ -532,7 +532,7 @@ export default function CreateSchedule() {
       window.appPopup?.({
         type: "success",
         title: "Đã xóa loại ca",
-        message: `Ca "${shift.shift_name}" đã được xóa.`,
+        message: `Ca "${shift.shift_name}" và dữ liệu liên quan đã được xóa.`,
       });
     } catch (err) {
       alert(

@@ -86,8 +86,61 @@ export const updateShift = async (id, { shift_name, start_time, end_time, descri
 };
 
 export const deleteShift = async (id) => {
-  await db.query("DELETE FROM shift_requirements WHERE shift_id=?", [id]);
-  await db.query("DELETE FROM employee_availability WHERE shift_id=?", [id]);
-  await db.query("DELETE FROM schedules WHERE shift_id=?", [id]);
-  await db.query("DELETE FROM shifts WHERE shift_id=?", [id]);
+  const connection = await db.getConnection();
+  const scheduleSubquery = "SELECT schedule_id FROM schedules WHERE shift_id = ?";
+
+  const safeDelete = async (sql, params) => {
+    try {
+      await connection.query(sql, params);
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") {
+        throw error;
+      }
+    }
+  };
+
+  try {
+    await connection.beginTransaction();
+
+    await safeDelete(
+      `DELETE FROM shift_swap_requests
+       WHERE requester_schedule_id IN (${scheduleSubquery})
+          OR target_schedule_id IN (${scheduleSubquery})`,
+      [id, id]
+    );
+    await safeDelete(
+      `DELETE FROM attendance_late_requests
+       WHERE schedule_id IN (${scheduleSubquery})`,
+      [id]
+    );
+    await safeDelete(
+      `DELETE FROM payroll_resolutions
+       WHERE schedule_id IN (${scheduleSubquery})`,
+      [id]
+    );
+    await safeDelete(
+      `DELETE FROM attendance
+       WHERE schedule_id IN (${scheduleSubquery})`,
+      [id]
+    );
+    await safeDelete("DELETE FROM draft_schedule_items WHERE shift_id = ?", [id]);
+    await safeDelete("DELETE FROM shift_role_requirements WHERE shift_id = ?", [id]);
+    await safeDelete("DELETE FROM shift_requirements WHERE shift_id = ?", [id]);
+    await safeDelete("DELETE FROM employee_availability WHERE shift_id = ?", [id]);
+    await safeDelete("DELETE FROM schedules WHERE shift_id = ?", [id]);
+    const [result] = await connection.query("DELETE FROM shifts WHERE shift_id = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      const error = new Error("Không tìm thấy ca làm cần xóa");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };

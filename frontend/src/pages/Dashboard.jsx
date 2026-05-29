@@ -92,6 +92,23 @@ function isActiveEmployee(employee) {
   return !status || status.includes("dang") || status.includes("active");
 }
 
+function hasAttendanceTime(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && !text.startsWith("0000-00-00");
+}
+
+function isWorkingAttendance(record) {
+  if (hasAttendanceTime(record.check_out)) return false;
+  if (record.progress_status === "CHECKED_IN") return true;
+  if (record.attendance_status === "LATE") return true;
+  if (record.attendance_bucket === "LATE") return true;
+
+  return (
+    hasAttendanceTime(record.check_in) &&
+    record.progress_status !== "COMPLETED"
+  );
+}
+
 function numberValue(value) {
   return Number(value || 0);
 }
@@ -694,9 +711,37 @@ export default function Dashboard() {
     }
   }, [dateParams, selectedEmployee]);
 
+  const fetchTodayAttendance = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/attendance/today`, {
+        headers: authHeaders(),
+      });
+      setTodayAttendance(res.data || []);
+    } catch (err) {
+      console.error("[Dashboard] today attendance:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(fetchTodayAttendance, 30000);
+    window.addEventListener("notification-count-changed", fetchTodayAttendance);
+    window.addEventListener("attendance-changed", fetchTodayAttendance);
+    window.addEventListener("focus", fetchTodayAttendance);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener(
+        "notification-count-changed",
+        fetchTodayAttendance,
+      );
+      window.removeEventListener("attendance-changed", fetchTodayAttendance);
+      window.removeEventListener("focus", fetchTodayAttendance);
+    };
+  }, [fetchTodayAttendance]);
 
   const employeesById = useMemo(
     () =>
@@ -736,10 +781,19 @@ export default function Dashboard() {
     const todayMissing = todayAttendance.filter(isMissingAttendance).length;
     const todayUpcoming = todayAttendance.filter(isUpcomingAttendance).length;
     const activeEmployees = employees.filter(isActiveEmployee).length;
+    const workingEmployeeIds = new Set(
+      todayAttendance
+        .filter(isWorkingAttendance)
+        .map((record) => Number(record.employee_id))
+        .filter(Boolean),
+    );
+    const workingShifts = todayAttendance.filter(isWorkingAttendance).length;
 
     return {
       totalEmployees: employees.length,
       activeEmployees,
+      workingEmployees: workingEmployeeIds.size,
+      workingShifts,
       totalShifts,
       totalHours,
       lateCount,
@@ -767,14 +821,14 @@ export default function Dashboard() {
       totalEmployees: {
         label: "Tổng nhân viên",
         value: formatNumber(totals.totalEmployees),
-        detail: `${formatNumber(totals.activeEmployees)} đang làm việc`,
+        detail: `${formatNumber(totals.workingEmployees)} đang trong ca`,
         icon: UserGroupIcon,
         tone: "blue",
       },
       activeEmployees: {
         label: "Nhân viên đang làm việc",
-        value: formatNumber(totals.activeEmployees),
-        detail: `${formatNumber(Math.max(totals.totalEmployees - totals.activeEmployees, 0))} đã nghỉ`,
+        value: formatNumber(totals.workingEmployees),
+        detail: `${formatNumber(totals.workingShifts)} ca đang mở`,
         icon: CheckCircleIcon,
         tone: "green",
       },

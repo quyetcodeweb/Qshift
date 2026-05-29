@@ -349,6 +349,8 @@ export default function AttendancePage() {
         { headers: authHeaders() },
       );
       await fetchToday();
+      window.dispatchEvent(new Event("attendance-changed"));
+      window.dispatchEvent(new Event("notification-count-changed"));
       notifyPopup(
         "success",
         action === "check_in" ? "Đã chấm vào" : "Đã chấm ra",

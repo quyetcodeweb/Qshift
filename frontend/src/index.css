@@ -7,12 +7,17 @@ body {
     "Segoe UI", Arial, Tahoma, ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
   color: #111827;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 html,
 body,
 #root {
   width: 100%;
   min-height: 100%;
+  font-family:
+    "Segoe UI", Arial, Tahoma, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
 }
 body {
   overflow-x: hidden;
@@ -22,6 +27,12 @@ input,
 select,
 textarea {
   font: inherit;
+}
+.font-sans,
+[class*="font-sans"] {
+  font-family:
+    "Segoe UI", Arial, Tahoma, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
 }
 table {
   border-collapse: collapse;
