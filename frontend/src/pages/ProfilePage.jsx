@@ -340,17 +340,26 @@ export default function ProfilePage() {
     }
   };
 
+  const notifyProfileError = (message, title = "Cần kiểm tra lại") => {
+    setError(message);
+    window.appPopup?.({
+      type: "warning",
+      title,
+      message,
+    });
+  };
+
   const changePassword = async () => {
     if (!passwordForm.currentPassword) {
-      setError("Vui lòng nhập mật khẩu cũ");
+      notifyProfileError("Vui lòng nhập mật khẩu cũ");
       return;
     }
     if (!passwordForm.password || passwordForm.password.length < 6) {
-      setError("Mật khẩu mới cần ít nhất 6 ký tự");
+      notifyProfileError("Mật khẩu mới cần ít nhất 6 ký tự");
       return;
     }
     if (passwordForm.password !== passwordForm.confirmPassword) {
-      setError("Mật khẩu xác nhận chưa khớp");
+      notifyProfileError("Mật khẩu xác nhận chưa khớp");
       return;
     }
 

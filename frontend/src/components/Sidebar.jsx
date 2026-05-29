@@ -25,6 +25,9 @@ import {
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  KeyIcon,
+  LockClosedIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
 import { getRole, getUser, logout } from "../utils/auth";
@@ -76,10 +79,154 @@ function UserAvatar({ user, profile }) {
   );
 }
 
+function AdminPasswordDialog({ open, onClose }) {
+  const [form, setForm] = React.useState({
+    currentPassword: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setForm({ currentPassword: "", password: "", confirmPassword: "" });
+  }, [open]);
+
+  if (!open) return null;
+
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const notifyWarning = (message) => {
+    window.appPopup?.({
+      type: "warning",
+      title: "Cần kiểm tra lại",
+      message,
+    });
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+
+    if (!form.currentPassword) {
+      notifyWarning("Vui lòng nhập mật khẩu hiện tại");
+      return;
+    }
+    if (!form.password || form.password.length < 6) {
+      notifyWarning("Mật khẩu mới cần ít nhất 6 ký tự");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      notifyWarning("Mật khẩu xác nhận chưa khớp");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `${API_URL}/users/me/password`,
+        {
+          currentPassword: form.currentPassword,
+          newPassword: form.password,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đổi mật khẩu",
+        message: "Mật khẩu admin đã được cập nhật.",
+      });
+      onClose();
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể đổi mật khẩu",
+        message:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          "Vui lòng thử lại.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-gray-950/35 p-3 backdrop-blur-sm sm:items-center">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+      >
+        <div className="flex items-start gap-3 px-4 pb-4 pt-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <LockClosedIcon className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-black text-gray-950">Đổi mật khẩu admin</h2>
+            <p className="mt-1 text-sm font-medium text-gray-500">
+              Cập nhật mật khẩu đăng nhập của tài khoản hiện tại.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Đóng"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 px-4 pb-4">
+          {[
+            ["currentPassword", "Mật khẩu hiện tại", "password"],
+            ["password", "Mật khẩu mới", "password"],
+            ["confirmPassword", "Xác nhận mật khẩu", "password"],
+          ].map(([field, label, type]) => (
+            <label key={field} className="block">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">
+                {label}
+              </span>
+              <input
+                type={type}
+                value={form[field]}
+                onChange={(event) => updateField(field, event.target.value)}
+                autoComplete="new-password"
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50 p-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-black text-gray-700 transition hover:bg-gray-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-60"
+          >
+            <KeyIcon className="h-4 w-4" />
+            {saving ? "Đang đổi" : "Đổi mật khẩu"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const location = useLocation();
   const [open, setOpen] = React.useState(0);
   const [count, setCount] = React.useState(0);
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
   const role = getRole();
   const user = getStoredUser();
   const [profile, setProfile] = React.useState(null);
@@ -174,7 +321,20 @@ export default function Sidebar() {
         </div>
 
         <div className="mb-5 flex items-center gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <UserAvatar user={user} profile={profile} />
+          <div className="relative shrink-0">
+            <UserAvatar user={user} profile={profile} />
+            {role === "ADMIN" && (
+              <button
+                type="button"
+                onClick={() => setPasswordOpen(true)}
+                className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white bg-blue-600 text-white shadow-md transition hover:bg-blue-700"
+                title="Đổi mật khẩu admin"
+                aria-label="Đổi mật khẩu admin"
+              >
+                <KeyIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-gray-900">{displayName}</p>
             <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
@@ -352,6 +512,11 @@ export default function Sidebar() {
         <ArrowLeftOnRectangleIcon className="h-5 w-5" />
         Logout
       </Button>
+
+      <AdminPasswordDialog
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+      />
     </Card>
   );
 }

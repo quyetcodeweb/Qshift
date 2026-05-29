@@ -705,6 +705,32 @@ function PreviewDialog({
     };
   }, [rows, schedule]);
 
+  const employeeShiftStats = useMemo(() => {
+    const counts = rows.reduce((map, row) => {
+      const employeeId = Number(row.employee_id);
+      if (!employeeId) return map;
+
+      const current = map.get(employeeId) || {
+        employee_id: employeeId,
+        employee_name: row.employee_name || "Chưa rõ nhân viên",
+        shift_count: 0,
+      };
+
+      current.employee_name =
+        row.employee_name || current.employee_name || "Chưa rõ nhân viên";
+      current.shift_count += 1;
+      map.set(employeeId, current);
+      return map;
+    }, new Map());
+
+    return [...counts.values()].sort((a, b) => {
+      if (b.shift_count !== a.shift_count) {
+        return b.shift_count - a.shift_count;
+      }
+      return String(a.employee_name).localeCompare(String(b.employee_name));
+    });
+  }, [rows]);
+
   if (!schedule) return null;
 
   return (
@@ -745,6 +771,32 @@ function PreviewDialog({
               value={`${stats.fulfillment}%`}
               tone={Number(stats.fulfillment) >= 90 ? "green" : "orange"}
             />
+          </div>
+
+          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+            {employeeShiftStats.length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-center text-sm font-semibold text-slate-500">
+                Chưa có nhân viên được xếp ca.
+              </div>
+            ) : (
+              <div className="max-h-32 overflow-y-auto overscroll-contain pr-1 sm:max-h-28">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {employeeShiftStats.map((item) => (
+                    <div
+                      key={item.employee_id}
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2"
+                    >
+                      <span className="min-w-0 truncate text-sm font-bold text-slate-800">
+                        {item.employee_name}
+                      </span>
+                      <span className="shrink-0 rounded bg-blue-50 px-2 py-0.5 text-xs font-black text-blue-700">
+                        {item.shift_count} ca
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {(schedule.stats?.unfulfilled > 0 ||
@@ -1610,7 +1662,7 @@ export default function AutoScheduleModal({
             <button
               type="button"
               onClick={closeModal}
-              className="self-start rounded-md px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100"
+              className="self-start rounded-md px-3 py-2 text-sm font-bold text-gray-800 hover:bg-red-50 lg:px-2 lg:py-1"
             >
               Đóng
             </button>
@@ -1647,7 +1699,7 @@ export default function AutoScheduleModal({
                     </Select>
                   </div>
 
-                  <div className="relative flex h-11 rounded-full bg-slate-100 p-1">
+                  <div className="relative flex h-11 rounded-full bg-gray-200 p-1">
                     <span
                       className={`absolute top-1 h-9 w-[calc(50%-4px)] rounded-full bg-white shadow-sm transition-transform duration-200 ${
                         configMode === "detailed"
