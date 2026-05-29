@@ -127,15 +127,22 @@ export async function generateSchedule({
       employeeRoles[emp.employee_id] = await getEmployeeRoles(emp.employee_id);
     }
 
+    const hasRoleRequirementOverride =
+      roleRequirementsOverride &&
+      typeof roleRequirementsOverride === "object";
     const shiftRoleRequirements = {};
     for (const shift of shiftDetails) {
       const savedRequirements = await getShiftRoleRequirements(
         shift.shift_id
       );
+      const overrideRequirements = hasRoleRequirementOverride
+        ? roleRequirementsOverride?.[shift.shift_id] ||
+          roleRequirementsOverride?.[String(shift.shift_id)] ||
+          {}
+        : undefined;
       shiftRoleRequirements[shift.shift_id] = normalizeRoleRequirements(
-        roleRequirementsOverride?.[shift.shift_id] ||
-          roleRequirementsOverride?.[String(shift.shift_id)],
-        savedRequirements
+        overrideRequirements,
+        hasRoleRequirementOverride ? [] : savedRequirements
       );
     }
 
@@ -182,14 +189,7 @@ export async function generateSchedule({
           if (!requirementsByDateShift[normalizedDate]) {
             requirementsByDateShift[normalizedDate] = {};
           }
-          const roleTotal = (shiftRoleRequirements[shiftId] || []).reduce(
-            (sum, req) => sum + req.required_count,
-            0
-          );
-          requirementsByDateShift[normalizedDate][shiftId] = Math.max(
-            numCount,
-            roleTotal
-          );
+          requirementsByDateShift[normalizedDate][shiftId] = numCount;
         }
       });
     });
@@ -215,8 +215,8 @@ export async function generateSchedule({
 
     // Get constraints
     const {
-      max_shifts_per_week = 6,
-      max_shifts_per_month = 124  // Increased from 25 to allow testing (31 days * 4 shifts = 124 assignments max)
+      max_shifts_per_week,
+      max_shifts_per_month
     } = constraints || {};
 
     // Pass 1: Role-based assignments
@@ -228,7 +228,10 @@ export async function generateSchedule({
 
         if (!shiftDetail) continue;
 
-        const requirements = shiftRoleRequirements[shiftIdNum] || [];
+        const requirements = prioritizeRoleRequirements(
+          shiftRoleRequirements[shiftIdNum] || [],
+          requiredCount
+        );
         const roleAssignmentDetails = [];
         let assigned = 0;
 
@@ -260,7 +263,10 @@ export async function generateSchedule({
             ).length;
 
             for (const emp of sortedRoleCandidates) {
-              if (assigned >= requiredCount || roleAssigned >= req.required_count) break;
+              if (
+                assigned >= requiredCount ||
+                roleAssigned >= req.effective_required_count
+              ) break;
 
               const canAssignRes = canAssign({
                 empId: emp.employee_id,
@@ -298,9 +304,11 @@ export async function generateSchedule({
             roleAssignmentDetails.push({
               role_id: req.role_id,
               role_name: req.role_name,
-              required: req.required_count,
+              required: req.effective_required_count,
+              requested: req.required_count,
+              priority: req.priority,
               assigned: roleAssigned,
-              shortfall: Math.max(0, req.required_count - roleAssigned)
+              shortfall: Math.max(0, req.effective_required_count - roleAssigned)
             });
           }
         }
@@ -337,9 +345,12 @@ export async function generateSchedule({
         if (assigned >= requiredCount) continue;
 
         let toAssign = requiredCount - assigned;
-        const requirements = shiftRoleRequirements[shiftIdNum] || [];
+        const requirements = prioritizeRoleRequirements(
+          shiftRoleRequirements[shiftIdNum] || [],
+          requiredCount
+        );
         const roleTotal = requirements.reduce(
-          (sum, req) => sum + req.required_count,
+          (sum, req) => sum + req.effective_required_count,
           0
         );
         const generalSlots = Math.max(0, requiredCount - roleTotal);
@@ -610,6 +621,26 @@ function sortCandidatesForSettings({
   settings
 }) {
   return [...candidates].sort((a, b) => {
+    if (settings.balance_by_workday) {
+      const workdayDiff =
+        (employeeGeneratedWorkdayCount[a.employee_id] || 0) -
+        (employeeGeneratedWorkdayCount[b.employee_id] || 0);
+
+      if (workdayDiff !== 0) return workdayDiff;
+    }
+
+    if (
+      settings.balance_scheduling ||
+      settings.balance_by_workday ||
+      settings.prefer_consecutive_shifts
+    ) {
+      const balanceDiff =
+        (employeeGeneratedCount[a.employee_id] || 0) -
+        (employeeGeneratedCount[b.employee_id] || 0);
+
+      if (balanceDiff !== 0) return balanceDiff;
+    }
+
     if (settings.prefer_consecutive_shifts) {
       const consecutiveDiff =
         getConsecutivePreferenceRank({
@@ -628,22 +659,6 @@ function sortCandidatesForSettings({
         });
 
       if (consecutiveDiff !== 0) return consecutiveDiff;
-    }
-
-    if (settings.balance_by_workday) {
-      const workdayDiff =
-        (employeeGeneratedWorkdayCount[a.employee_id] || 0) -
-        (employeeGeneratedWorkdayCount[b.employee_id] || 0);
-
-      if (workdayDiff !== 0) return workdayDiff;
-    }
-
-    if (settings.balance_scheduling || settings.prefer_consecutive_shifts) {
-      const balanceDiff =
-        (employeeGeneratedCount[a.employee_id] || 0) -
-        (employeeGeneratedCount[b.employee_id] || 0);
-
-      if (balanceDiff !== 0) return balanceDiff;
     }
 
     if (settings.balance_scheduling) {
@@ -665,6 +680,7 @@ function normalizeRoleRequirements(override, savedRequirements) {
         role_id: Number(roleId),
         role_name: requirement?.role_name,
         color: requirement?.color,
+        priority: requirement?.priority,
         required_count: Math.max(
           0,
           Number(requirement?.required_count ?? requirement) || 0
@@ -686,11 +702,36 @@ function normalizeRoleRequirements(override, savedRequirements) {
       role_id: roleId,
       role_name: row.role_name || existing?.role_name,
       color: row.color || existing?.color,
+      priority: Math.max(
+        1,
+        Number(row.priority ?? existing?.priority ?? byRole.size + 1) || 1
+      ),
       required_count: Math.max(requiredCount, existing?.required_count || 0),
     });
   });
 
   return Array.from(byRole.values());
+}
+
+function prioritizeRoleRequirements(requirements, totalRequired) {
+  let remaining = Math.max(0, Number(totalRequired) || 0);
+
+  return [...requirements]
+    .sort(
+      (a, b) =>
+        Number(a.priority || 1) - Number(b.priority || 1) ||
+        Number(a.role_id) - Number(b.role_id)
+    )
+    .map((requirement) => {
+      const requested = Math.max(0, Number(requirement.required_count) || 0);
+      const effective = Math.min(requested, remaining);
+      remaining -= effective;
+
+      return {
+        ...requirement,
+        effective_required_count: effective,
+      };
+    });
 }
 
 function normalizeDateKey(value) {
@@ -721,9 +762,44 @@ async function prepareAvailability(month, year, frontendAvailability) {
     typeof frontendAvailability === "object" &&
     Object.keys(frontendAvailability).length > 0;
 
+  const addAvailabilityRecord = (employeeId, workDate, shiftId) => {
+    const empId = Number(employeeId);
+    const normalizedDate = normalizeDateKey(workDate);
+    const numShiftId = Number(shiftId);
+
+    if (
+      Number.isNaN(empId) ||
+      empId <= 0 ||
+      !normalizedDate ||
+      Number.isNaN(numShiftId) ||
+      numShiftId <= 0
+    ) {
+      return false;
+    }
+
+    if (!employeeAvailability[empId]) {
+      employeeAvailability[empId] = {};
+    }
+
+    if (!employeeAvailability[empId][normalizedDate]) {
+      employeeAvailability[empId][normalizedDate] = new Set();
+    }
+
+    employeeAvailability[empId][normalizedDate].add(numShiftId);
+    employeesWithData.add(empId);
+    return true;
+  };
+
+  const availability = await getEmployeeAvailability(month, year);
+  console.log(`[prepareAvailability] Found ${availability.length} database availability records`);
+
+  availability.forEach((record) => {
+    addAvailabilityRecord(record.employee_id, record.work_date, record.shift_id);
+  });
+
   if (hasFrontendData) {
-    dataSource = "frontend";
-    console.log(`[prepareAvailability] 📥 Processing frontend data: ${Object.keys(frontendAvailability).length} employees`);
+    dataSource = availability.length > 0 ? "database+frontend" : "frontend";
+    console.log(`[prepareAvailability] 📥 Merging frontend data: ${Object.keys(frontendAvailability).length} employees`);
 
     Object.entries(frontendAvailability).forEach(([employeeIdStr, dateShifts]) => {
       const empId = Number(employeeIdStr);
@@ -746,61 +822,22 @@ async function prepareAvailability(month, year, frontendAvailability) {
       }
 
       Object.entries(dateShifts).forEach(([workDate, shiftIds]) => {
-        const normalizedDate = normalizeDateKey(workDate);
-
-        if (!normalizedDate) {
+        if (!normalizeDateKey(workDate)) {
           console.warn(`[prepareAvailability] ⚠️ Invalid date: ${workDate}`);
           return;
         }
 
-        if (!employeeAvailability[empId][normalizedDate]) {
-          employeeAvailability[empId][normalizedDate] = new Set();
-        }
-
         const shifts = Array.isArray(shiftIds) ? shiftIds : [shiftIds];
         shifts.forEach((shiftId) => {
-          // ✅ FIX: Normalize shift_id to number
-          const numShiftId = Number(shiftId);
-          if (!Number.isNaN(numShiftId) && numShiftId > 0) {
-            employeeAvailability[empId][normalizedDate].add(numShiftId);
-          }
+          addAvailabilityRecord(empId, workDate, shiftId);
         });
       });
     });
 
-    console.log(`[prepareAvailability] ✅ Frontend: ${employeesWithData.size} employees with data`);
+    console.log(`[prepareAvailability] ✅ Merged: ${employeesWithData.size} employees with data`);
   } else {
     dataSource = "database";
-    console.log(`[prepareAvailability] 📊 Loading from database for ${month}/${year}`);
-
-    const availability = await getEmployeeAvailability(month, year);
-    console.log(`[prepareAvailability] Found ${availability.length} availability records`);
-
-    if (availability.length > 0) {
-      availability.forEach((record) => {
-        // ✅ FIX: Normalize ALL IDs to numbers for consistency
-        const employee_id = Number(record.employee_id);
-        const shift_id = Number(record.shift_id);
-        const work_date = normalizeDateKey(record.work_date);
-
-        if (!work_date) {
-          return;
-        }
-
-        if (!employeeAvailability[employee_id]) {
-          employeeAvailability[employee_id] = {};
-          employeesWithData.add(employee_id);
-        }
-
-        if (!employeeAvailability[employee_id][work_date]) {
-          employeeAvailability[employee_id][work_date] = new Set();
-        }
-
-        employeeAvailability[employee_id][work_date].add(shift_id);
-      });
-
-      console.log(`[prepareAvailability] ✅ Database: ${employeesWithData.size} employees with availability`);
-    }
+    console.log(`[prepareAvailability] ✅ Database: ${employeesWithData.size} employees with availability`);
   }
 
   return {
@@ -849,8 +886,8 @@ function canAssign({
   employeesWithData,
   employeeAssignmentCount,
   shiftDetails,
-  max_shifts_per_week = 6,
-  max_shifts_per_month = 25
+  max_shifts_per_week,
+  max_shifts_per_month
 }) {
   // ✅ FIX: Normalize empId to number (might be string from Object.entries)
   empId = Number(empId);
@@ -909,27 +946,35 @@ function canAssign({
   }
 
   // ===== CHECK 5: Max per month check =====
-  if ((employeeAssignmentCount[empId] || 0) >= max_shifts_per_month) {
+  const monthlyLimit = Number(max_shifts_per_month);
+  if (
+    Number.isFinite(monthlyLimit) &&
+    monthlyLimit > 0 &&
+    (employeeAssignmentCount[empId] || 0) >= monthlyLimit
+  ) {
     return {
       can: false,
-      reason: `Đạt giới hạn ca/tháng (${max_shifts_per_month})`
+      reason: `Đạt giới hạn ca/tháng (${monthlyLimit})`
     };
   }
 
   // ===== CHECK 6: Max per week check =====
-  const workDateObj = new Date(workDate);
-  const shiftsThisWeek = generatedSchedule.filter((s) => {
-    return (
-      s.employee_id === empId &&
-      isInSameWeek(new Date(s.work_date), workDateObj)
-    );
-  }).length;
+  const weeklyLimit = Number(max_shifts_per_week);
+  if (Number.isFinite(weeklyLimit) && weeklyLimit > 0) {
+    const workDateObj = new Date(workDate);
+    const shiftsThisWeek = generatedSchedule.filter((s) => {
+      return (
+        s.employee_id === empId &&
+        isInSameWeek(new Date(s.work_date), workDateObj)
+      );
+    }).length;
 
-  if (shiftsThisWeek + 1 > max_shifts_per_week) {
-    return {
-      can: false,
-      reason: `Vượt giới hạn ca/tuần (${max_shifts_per_week})`
-    };
+    if (shiftsThisWeek + 1 > weeklyLimit) {
+      return {
+        can: false,
+        reason: `Vượt giới hạn ca/tuần (${weeklyLimit})`
+      };
+    }
   }
 
   return { can: true, reason: "OK" };

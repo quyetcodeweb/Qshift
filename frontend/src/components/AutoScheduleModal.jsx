@@ -113,7 +113,13 @@ function summarizeRoleConstraints(roleRequirements) {
   return Object.values(roleRequirements).reduce(
     (total, roleMap) =>
       total +
-      Object.values(roleMap || {}).filter((count) => Number(count) > 0).length,
+      Object.values(roleMap || {}).filter((config) => {
+        const count =
+          typeof config === "object" && config !== null
+            ? config.required_count
+            : config;
+        return Number(count) > 0;
+      }).length,
     0,
   );
 }
@@ -241,6 +247,9 @@ function RoleRequirementsDialog({
                         <span className="block max-w-28 truncate normal-case">
                           {role.role_name}
                         </span>
+                        <span className="mt-1 block text-[10px] normal-case text-slate-400">
+                          SL / ưu tiên
+                        </span>
                       </th>
                     ))}
                   </tr>
@@ -262,23 +271,50 @@ function RoleRequirementsDialog({
                           key={role.role_id}
                           className="px-3 py-3 text-center"
                         >
-                          <input
-                            type="number"
-                            min="0"
-                            value={
-                              roleRequirements[shift.shift_id]?.[
-                                role.role_id
-                              ] || 0
-                            }
-                            onChange={(event) =>
-                              setRoleRequirement(
-                                shift.shift_id,
-                                role.role_id,
-                                event.target.value,
-                              )
-                            }
-                            className="h-9 w-14 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-medium text-slate-950 outline-none focus:border-blue-600"
-                          />
+                          <div className="flex justify-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              value={
+                                roleRequirements[shift.shift_id]?.[
+                                  role.role_id
+                                ]?.required_count ??
+                                roleRequirements[shift.shift_id]?.[
+                                  role.role_id
+                                ] ??
+                                0
+                              }
+                              onChange={(event) =>
+                                setRoleRequirement(
+                                  shift.shift_id,
+                                  role.role_id,
+                                  "required_count",
+                                  event.target.value,
+                                )
+                              }
+                              className="h-9 w-12 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-medium text-slate-950 outline-none focus:border-blue-600"
+                              title="Số lượng mong muốn"
+                            />
+                            <input
+                              type="number"
+                              min="1"
+                              value={
+                                roleRequirements[shift.shift_id]?.[
+                                  role.role_id
+                                ]?.priority || 1
+                              }
+                              onChange={(event) =>
+                                setRoleRequirement(
+                                  shift.shift_id,
+                                  role.role_id,
+                                  "priority",
+                                  event.target.value,
+                                )
+                              }
+                              className="h-9 w-12 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-medium text-slate-950 outline-none focus:border-blue-600"
+                              title="Ưu tiên: số nhỏ hơn được xếp trước"
+                            />
+                          </div>
                         </td>
                       ))}
                     </tr>
@@ -1402,12 +1438,20 @@ export default function AutoScheduleModal({
     }));
   };
 
-  const setRoleRequirement = (shiftId, roleId, value) => {
+  const setRoleRequirement = (shiftId, roleId, field, value) => {
     setRoleRequirements((current) => ({
       ...current,
       [shiftId]: {
         ...current[shiftId],
-        [roleId]: normalizeCount(value),
+        [roleId]: {
+          ...(typeof current[shiftId]?.[roleId] === "object"
+            ? current[shiftId]?.[roleId]
+            : { required_count: normalizeCount(current[shiftId]?.[roleId]) }),
+          [field]:
+            field === "priority"
+              ? Math.max(1, normalizeCount(value) || 1)
+              : normalizeCount(value),
+        },
       },
     }));
   };
@@ -1422,14 +1466,22 @@ export default function AutoScheduleModal({
     return Object.entries(roleRequirements).reduce(
       (payload, [shiftId, roleMap]) => {
         const rolesForShift = Object.entries(roleMap || {}).reduce(
-          (rolePayload, [roleId, count]) => {
-            const requiredCount = normalizeCount(count);
+          (rolePayload, [roleId, config]) => {
+            const requiredCount = normalizeCount(
+              typeof config === "object" && config !== null
+                ? config.required_count
+                : config,
+            );
             if (requiredCount > 0) {
               const role = roles.find(
                 (item) => Number(item.role_id) === Number(roleId),
               );
               rolePayload[Number(roleId)] = {
                 required_count: requiredCount,
+                priority:
+                  typeof config === "object" && config !== null
+                    ? Math.max(1, normalizeCount(config.priority) || 1)
+                    : 1,
                 role_name: role?.role_name,
               };
             }

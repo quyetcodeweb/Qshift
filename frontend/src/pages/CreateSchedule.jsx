@@ -161,6 +161,7 @@ export default function CreateSchedule() {
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState([]);
   const [viewMonth, setViewMonth] = useState("");
   const [viewYear, setViewYear] = useState("");
   const [page, setPage] = useState(1);
@@ -281,6 +282,24 @@ export default function CreateSchedule() {
     (page - 1) * schedulePageSize,
     page * schedulePageSize,
   );
+  const pagedScheduleIds = useMemo(
+    () => pagedSchedules.map((schedule) => Number(schedule.schedule_id)),
+    [pagedSchedules],
+  );
+  const selectedScheduleIdSet = useMemo(
+    () => new Set(selectedScheduleIds.map(Number)),
+    [selectedScheduleIds],
+  );
+  const selectedSchedules = useMemo(
+    () =>
+      filteredSchedules.filter((schedule) =>
+        selectedScheduleIdSet.has(Number(schedule.schedule_id)),
+      ),
+    [filteredSchedules, selectedScheduleIdSet],
+  );
+  const allPageSelected =
+    pagedScheduleIds.length > 0 &&
+    pagedScheduleIds.every((id) => selectedScheduleIdSet.has(id));
   const selectedScheduleFormEmployee = employees.find(
     (employee) => String(employee.employee_id) === scheduleForm.employee_id,
   );
@@ -300,6 +319,7 @@ export default function CreateSchedule() {
 
   useEffect(() => {
     setPage(1);
+    setSelectedScheduleIds([]);
   }, [
     query,
     filterEndDate,
@@ -421,6 +441,9 @@ export default function CreateSchedule() {
         headers: authHeaders(),
       });
       setSelectedSchedule(null);
+      setSelectedScheduleIds((current) =>
+        current.filter((id) => Number(id) !== Number(schedule.schedule_id)),
+      );
       fetchSchedules();
       window.appPopup?.({
         type: "success",
@@ -429,6 +452,66 @@ export default function CreateSchedule() {
       });
     } catch (err) {
       alert(err.response?.data?.message || "Không thể xóa ca làm");
+    }
+  };
+
+  const toggleScheduleSelection = (scheduleId) => {
+    const normalizedId = Number(scheduleId);
+    setSelectedScheduleIds((current) =>
+      current.includes(normalizedId)
+        ? current.filter((id) => id !== normalizedId)
+        : [...current, normalizedId],
+    );
+  };
+
+  const toggleCurrentPageSelection = () => {
+    setSelectedScheduleIds((current) => {
+      const currentSet = new Set(current.map(Number));
+      if (allPageSelected) {
+        return current.filter((id) => !pagedScheduleIds.includes(Number(id)));
+      }
+      pagedScheduleIds.forEach((id) => currentSet.add(id));
+      return [...currentSet];
+    });
+  };
+
+  const deleteSchedulesBulk = async (schedulesToDelete, label) => {
+    if (!schedulesToDelete.length) return;
+
+    const confirmed = await window.appConfirm?.({
+      title: `Xóa ${schedulesToDelete.length} ca làm`,
+      message: `Xóa ${label}? Dữ liệu chấm công và thông tin liên quan của các ca này cũng sẽ bị xóa.`,
+      confirmText: "Xóa tất cả",
+      cancelText: "Giữ lại",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
+    try {
+      await Promise.all(
+        schedulesToDelete.map((schedule) =>
+          axios.delete(`${API_URL}/schedules/${schedule.schedule_id}`, {
+            headers: authHeaders(),
+          }),
+        ),
+      );
+      setSelectedSchedule(null);
+      setSelectedScheduleIds([]);
+      fetchSchedules();
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa ca làm",
+        message: `Đã xóa ${schedulesToDelete.length} ca làm.`,
+      });
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể xóa ca làm",
+        message:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          "Một số ca chưa được xóa. Vui lòng thử lại.",
+      });
     }
   };
 
@@ -822,6 +905,56 @@ export default function CreateSchedule() {
                 <Option value="DRAFT">Chưa công bố</Option>
               </Select>
             </div>
+            <div className="flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleCurrentPageSelection}
+                  disabled={pagedSchedules.length === 0}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  {allPageSelected ? "Bỏ chọn trang này" : "Chọn trang này"}
+                </button>
+                <span className="text-sm font-semibold text-gray-500">
+                  Đã chọn {selectedSchedules.length} ca
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  disabled={selectedSchedules.length === 0}
+                  onClick={() =>
+                    deleteSchedulesBulk(selectedSchedules, "các ca đã chọn")
+                  }
+                  className="flex items-center gap-2 rounded-md border-red-200 normal-case text-red-700"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  Xóa đã chọn
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  disabled={filteredSchedules.length === 0}
+                  onClick={() =>
+                    deleteSchedulesBulk(
+                      filteredSchedules,
+                      "toàn bộ ca trong bộ lọc hiện tại",
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-md border-red-300 bg-red-50 normal-case text-red-700"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  Xóa tất cả đang lọc
+                </Button>
+              </div>
+            </div>
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -835,51 +968,72 @@ export default function CreateSchedule() {
               </div>
             ) : (
               pagedSchedules.map((schedule) => (
-                <button
+                <div
                   key={schedule.schedule_id}
-                  type="button"
-                  onClick={() => setSelectedSchedule(schedule)}
-                  className="grid w-full gap-3 px-4 py-4 text-left transition hover:bg-gray-50 lg:grid-cols-[120px_1fr_1fr_120px_130px]"
+                  className={`flex items-stretch gap-3 px-4 py-4 transition hover:bg-gray-50 ${
+                    selectedScheduleIdSet.has(Number(schedule.schedule_id))
+                      ? "bg-blue-50/50"
+                      : ""
+                  }`}
                 >
-                  <div>
-                    <div className="text-sm font-bold text-gray-950">
-                      {formatDate(schedule.work_date)}
+                  <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center self-center rounded-md border border-gray-200 bg-white hover:border-blue-300">
+                    <input
+                      type="checkbox"
+                      checked={selectedScheduleIdSet.has(
+                        Number(schedule.schedule_id),
+                      )}
+                      onChange={() =>
+                        toggleScheduleSelection(schedule.schedule_id)
+                      }
+                      className="h-4 w-4 rounded border-gray-300"
+                      aria-label={`Chọn ca ${schedule.shift_name} của ${schedule.employee_name || "nhân viên"}`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSchedule(schedule)}
+                    className="grid min-w-0 flex-1 gap-3 text-left lg:grid-cols-[120px_1fr_1fr_120px_130px]"
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-gray-950">
+                        {formatDate(schedule.work_date)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-gray-500">
+                        {schedule.work_date}
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs font-semibold text-gray-500">
-                      {schedule.work_date}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: schedule.color || "#2563eb" }}
+                        />
+                        <span className="truncate text-sm font-bold text-gray-950">
+                          {schedule.shift_name}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: schedule.color || "#2563eb" }}
-                      />
-                      <span className="truncate text-sm font-bold text-gray-950">
-                        {schedule.shift_name}
+                    <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-800">
+                      <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                      <span className="truncate">
+                        {schedule.employee_name || "-"}
                       </span>
                     </div>
-                  </div>
-                  <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-800">
-                    <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                    <span className="truncate">
-                      {schedule.employee_name || "-"}
-                    </span>
-                  </div>
-                  <div className="text-sm font-semibold text-gray-700">
-                    <div>{formatTime(schedule.start_time)}</div>
-                    <div className="mt-1 text-gray-500">
-                      {formatTime(schedule.end_time)}
+                    <div className="text-sm font-semibold text-gray-700">
+                      <div>{formatTime(schedule.start_time)}</div>
+                      <div className="mt-1 text-gray-500">
+                        {formatTime(schedule.end_time)}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <span
-                      className={`inline-flex rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${statusBadge(schedule.status)}`}
-                    >
-                      {statusText(schedule.status)}
-                    </span>
-                  </div>
-                </button>
+                    <div>
+                      <span
+                        className={`inline-flex rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${statusBadge(schedule.status)}`}
+                      >
+                        {statusText(schedule.status)}
+                      </span>
+                    </div>
+                  </button>
+                </div>
               ))
             )}
           </div>
