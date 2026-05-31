@@ -365,6 +365,7 @@ function PreviewDialog({
 }) {
   const [previewMode, setPreviewMode] = useState("list");
   const [missingOnly, setMissingOnly] = useState(false);
+  const [proposeSupplemental, setProposeSupplemental] = useState(false);
 
   const rows = useMemo(() => {
     const generated = schedule?.generated_shifts || [];
@@ -766,6 +767,17 @@ function PreviewDialog({
       return String(a.employee_name).localeCompare(String(b.employee_name));
     });
   }, [rows]);
+
+  const supplementalRequests = useMemo(
+    () =>
+      missingSlots.map((slot) => ({
+        work_date: slot.dateStr,
+        shift_id: slot.shift_id,
+        role_id: slot.role_id || null,
+        count: 1,
+      })),
+    [missingSlots],
+  );
 
   if (!schedule) return null;
 
@@ -1237,6 +1249,21 @@ function PreviewDialog({
 
         <div className="border-t border-slate-200 bg-slate-50 p-4 sm:px-5">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+            <label className="flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 lg:col-span-3">
+              <input
+                type="checkbox"
+                checked={proposeSupplemental}
+                disabled={supplementalRequests.length === 0}
+                onChange={(event) => setProposeSupplemental(event.target.checked)}
+                className="h-4 w-4 rounded border-orange-300"
+              />
+              <span>
+                Bạn có muốn đề xuất đăng ký lịch bổ sung?
+                {supplementalRequests.length > 0
+                  ? ` (${supplementalRequests.length} ca thiếu)`
+                  : " (không có ca thiếu)"}
+              </span>
+            </label>
             <Input
               label="Tên bản nháp"
               value={draftName}
@@ -1252,8 +1279,18 @@ function PreviewDialog({
               {loading ? "Đang lưu..." : "Lưu nháp"}
             </Button>
             <Button
-              onClick={onPublish}
-              disabled={loading || rows.length === 0}
+              onClick={() =>
+                onPublish({
+                  supplementalRequests: proposeSupplemental
+                    ? supplementalRequests
+                    : [],
+                })
+              }
+              disabled={
+                loading ||
+                (rows.length === 0 &&
+                  (!proposeSupplemental || supplementalRequests.length === 0))
+              }
               className="rounded-md bg-blue-700 normal-case"
             >
               {loading ? "Đang công bố..." : "Công bố lịch"}
@@ -1647,7 +1684,7 @@ export default function AutoScheduleModal({
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = async ({ supplementalRequests = [] } = {}) => {
     const confirmed = await window.appConfirm?.({
       title: "Công bố lịch làm",
       message: `Công bố lịch tháng ${month}/${year} cho nhân viên?`,
@@ -1665,10 +1702,12 @@ export default function AutoScheduleModal({
           month,
           year,
           shifts: generatedPayload("PUBLISHED"),
+          supplemental_requests: supplementalRequests,
         },
         { headers: authHeaders() },
       );
       onGenerate?.({ month, year });
+      window.dispatchEvent(new Event("notification-count-changed"));
       window.appPopup?.({
         type: "success",
         title: "Đã công bố lịch",

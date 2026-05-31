@@ -206,3 +206,23 @@ CREATE TABLE IF NOT EXISTS draft_schedule_items (
     FOREIGN KEY (shift_id) REFERENCES shifts(shift_id),
     FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS supplemental_shift_requests (
+    request_id INT AUTO_INCREMENT PRIMARY KEY,
+    shift_id INT NOT NULL,
+    work_date DATE NOT NULL,
+    role_id INT NULL,
+    status VARCHAR(20) DEFAULT 'OPEN',
+    created_by INT NULL,
+    filled_by_employee_id INT NULL,
+    schedule_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    filled_at DATETIME NULL,
+    FOREIGN KEY (shift_id) REFERENCES shifts(shift_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (filled_by_employee_id) REFERENCES employees(employee_id) ON DELETE SET NULL,
+    FOREIGN KEY (schedule_id) REFERENCES schedules(schedule_id) ON DELETE SET NULL,
+    INDEX idx_supplemental_work_date (work_date),
+    INDEX idx_supplemental_status (status)
+);

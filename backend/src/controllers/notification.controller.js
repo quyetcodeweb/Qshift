@@ -53,7 +53,13 @@ export const getNotifications = async (req, res) => {
   await ensureLateRequestTable();
 
   const [rows] = await db.query(
-    `SELECT n.*,
+    `SELECT n.notification_id,
+            n.user_id,
+            n.message,
+            n.type,
+            n.is_read,
+            n.ref_id,
+            DATE_FORMAT(CONVERT_TZ(n.created_at, '+00:00', '+07:00'), '%Y-%m-%d %H:%i:%s') as created_at,
             e.name as employee_name,
             ar.month, ar.year, ar.data as availability_data, ar.status as request_status,
             pf.feedback_id as payroll_feedback_id,

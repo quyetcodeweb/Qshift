@@ -6,10 +6,14 @@ import {
   publishSchedule,
   getCurrentSchedules,
   createScheduleNote,
+  createSupplementalRequest,
+  acceptSupplementalRequest,
+  deleteSupplementalRequest,
   getDrafts,
   deleteDraft,
   getAvailability,
   getScheduleNotes,
+  getSupplementalRequests,
   getEmployeeStats,
   saveDraftWithName,
   getDraftsList,
@@ -42,6 +46,10 @@ router.delete("/draft/:id", verifyToken, deleteDraft);
 router.get("/current", verifyToken, getCurrentSchedules);
 router.get("/notes", verifyToken, getScheduleNotes);
 router.post("/notes", verifyToken, createScheduleNote);
+router.get("/supplemental-requests", verifyToken, getSupplementalRequests);
+router.post("/supplemental-requests", verifyToken, createSupplementalRequest);
+router.post("/supplemental-requests/:id/accept", verifyToken, acceptSupplementalRequest);
+router.delete("/supplemental-requests/:id", verifyToken, deleteSupplementalRequest);
 router.get("/availability/:month/:year", verifyToken, getAvailability);
 router.get("/stats", verifyToken, getEmployeeStats);
 

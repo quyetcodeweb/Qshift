@@ -31,10 +31,14 @@ function authHeaders() {
 
 function formatDateTime(value) {
   if (!value) return "-";
-  const date = new Date(value);
+  const normalized = String(value).includes("T")
+    ? String(value)
+    : `${String(value).replace(" ", "T")}+07:00`;
+  const date = new Date(normalized);
   return Number.isNaN(date.getTime())
     ? "-"
     : date.toLocaleString("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
         hour: "2-digit",
         minute: "2-digit",
         day: "2-digit",

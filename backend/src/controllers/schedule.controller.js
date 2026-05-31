@@ -108,6 +108,133 @@ async function ensureScheduleNotesTable() {
   `);
 }
 
+async function ensureSupplementalRequestTable() {
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS roles (
+      role_id INT AUTO_INCREMENT PRIMARY KEY,
+      role_name VARCHAR(100) UNIQUE NOT NULL,
+      description TEXT,
+      color VARCHAR(20),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS supplemental_shift_requests (
+      request_id INT AUTO_INCREMENT PRIMARY KEY,
+      shift_id INT NOT NULL,
+      work_date DATE NOT NULL,
+      role_id INT NULL,
+      status VARCHAR(20) DEFAULT 'OPEN',
+      created_by INT NULL,
+      filled_by_employee_id INT NULL,
+      schedule_id INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      filled_at DATETIME NULL,
+      FOREIGN KEY (shift_id) REFERENCES shifts(shift_id) ON DELETE CASCADE,
+      FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE SET NULL,
+      FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+      FOREIGN KEY (filled_by_employee_id) REFERENCES employees(employee_id) ON DELETE SET NULL,
+      FOREIGN KEY (schedule_id) REFERENCES schedules(schedule_id) ON DELETE SET NULL,
+      INDEX idx_supplemental_work_date (work_date),
+      INDEX idx_supplemental_status (status)
+    )
+  `);
+}
+
+async function getUserRole(userId) {
+  const [rows] = await database.query("SELECT role FROM users WHERE user_id = ?", [
+    userId,
+  ]);
+  return rows[0]?.role || null;
+}
+
+async function requireAdmin(userId, res, message = "Chi admin moi co quyen thuc hien") {
+  const role = await getUserRole(userId);
+  if (role !== "ADMIN") {
+    res.status(403).json({ message });
+    return false;
+  }
+  return true;
+}
+
+function normalizeWorkDate(value) {
+  const date = String(value || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+async function notifyEmployees(message, type, refId = null) {
+  const [employees] = await database.query(
+    "SELECT user_id FROM employees WHERE user_id IS NOT NULL"
+  );
+
+  for (const employee of employees) {
+    await database.query(
+      `INSERT INTO notifications (user_id, message, type, ref_id)
+       VALUES (?, ?, ?, ?)`,
+      [employee.user_id, message, type, refId]
+    );
+  }
+}
+
+async function notifyAdmins(message, type, refId = null) {
+  const [admins] = await database.query("SELECT user_id FROM users WHERE role = 'ADMIN'");
+
+  for (const admin of admins) {
+    await database.query(
+      `INSERT INTO notifications (user_id, message, type, ref_id)
+       VALUES (?, ?, ?, ?)`,
+      [admin.user_id, message, type, refId]
+    );
+  }
+}
+
+async function createSupplementalRequests({
+  requests,
+  userId,
+  notify = true,
+  connection = database,
+}) {
+  await ensureSupplementalRequestTable();
+
+  const normalizedRequests = (Array.isArray(requests) ? requests : [])
+    .map((request) => ({
+      shift_id: Number(request.shift_id),
+      work_date: normalizeWorkDate(request.work_date),
+      role_id: request.role_id ? Number(request.role_id) : null,
+      count: Math.max(1, Number(request.count) || 1),
+    }))
+    .filter((request) => request.shift_id > 0 && request.work_date);
+
+  let created = 0;
+  const createdIds = [];
+
+  for (const request of normalizedRequests) {
+    for (let index = 0; index < request.count; index += 1) {
+      const [result] = await connection.query(
+        `INSERT INTO supplemental_shift_requests (shift_id, work_date, role_id, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [request.shift_id, request.work_date, request.role_id, userId]
+      );
+      created += 1;
+      createdIds.push(result.insertId);
+    }
+  }
+
+  if (notify && created > 0) {
+    const dates = [...new Set(normalizedRequests.map((request) => request.work_date))]
+      .sort()
+      .join(", ");
+    await notifyEmployees(
+      `Có ${created} yêu cầu đăng ký bổ sung lịch làm (${dates}).`,
+      "SUPPLEMENTAL_SHIFT_REQUEST",
+      createdIds[0] || null
+    );
+  }
+
+  return { created, createdIds };
+}
+
 export async function autoGenerate(req, res) {
   try {
     const {
@@ -202,7 +329,7 @@ export async function saveDraft(req, res) {
 
 export async function publishSchedule(req, res) {
   try {
-    const { month, year, shifts, schedule_id } = req.body;
+    const { month, year, shifts, schedule_id, supplemental_requests } = req.body;
     const userId = req.user?.user_id;
 
     console.log("[publishSchedule] Publishing schedule");
@@ -215,6 +342,12 @@ export async function publishSchedule(req, res) {
       year,
       shifts,
       schedule_id,
+    });
+
+    const supplementalResult = await createSupplementalRequests({
+      requests: supplemental_requests,
+      userId,
+      notify: Array.isArray(supplemental_requests) && supplemental_requests.length > 0,
     });
 
     console.log("[publishSchedule] Published successfully");
@@ -249,7 +382,10 @@ export async function publishSchedule(req, res) {
       );
     }
 
-    res.json(result);
+    res.json({
+      ...result,
+      supplemental_requests_created: supplementalResult.created,
+    });
   } catch (error) {
     console.error("[publishSchedule] Error:", error);
     res.status(500).json({ message: error.message });
@@ -405,6 +541,234 @@ export async function createScheduleNote(req, res) {
     res.json({ message: "Đã gửi thông báo lịch", count: dates.length });
   } catch (error) {
     console.error("[createScheduleNote] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function getSupplementalRequests(req, res) {
+  try {
+    await ensureSupplementalRequestTable();
+
+    const conditions = ["sr.status = 'OPEN'"];
+    const params = [];
+
+    if (req.query.startDate) {
+      conditions.push("sr.work_date >= ?");
+      params.push(req.query.startDate);
+    }
+    if (req.query.endDate) {
+      conditions.push("sr.work_date <= ?");
+      params.push(req.query.endDate);
+    }
+
+    const [rows] = await database.query(
+      `SELECT sr.request_id,
+              sr.shift_id,
+              sh.shift_name,
+              sh.color,
+              TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
+              TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time,
+              DATE_FORMAT(sr.work_date, '%Y-%m-%d') AS work_date,
+              sr.role_id,
+              r.role_name,
+              sr.status
+       FROM supplemental_shift_requests sr
+       JOIN shifts sh ON sr.shift_id = sh.shift_id
+       LEFT JOIN roles r ON sr.role_id = r.role_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY sr.work_date ASC, sh.start_time ASC, sr.request_id ASC`,
+      params
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("[getSupplementalRequests] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function createSupplementalRequest(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    const isAdmin = await requireAdmin(
+      userId,
+      res,
+      "Chỉ admin có thể tạo yêu cầu đăng ký bổ sung"
+    );
+    if (!isAdmin) return;
+
+    const requests = Array.isArray(req.body.requests)
+      ? req.body.requests
+      : [
+          {
+            shift_id: req.body.shift_id,
+            work_date: req.body.work_date,
+            role_id: req.body.role_id,
+            count: req.body.count,
+          },
+        ];
+
+    const result = await createSupplementalRequests({
+      requests,
+      userId,
+      notify: true,
+    });
+
+    if (result.created === 0) {
+      return res.status(400).json({ message: "Ngày và ca làm là bắt buộc" });
+    }
+
+    res.json({
+      message: "Đã tạo yêu cầu đăng ký bổ sung",
+      count: result.created,
+    });
+  } catch (error) {
+    console.error("[createSupplementalRequest] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function acceptSupplementalRequest(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    const role = await getUserRole(userId);
+
+    if (role === "ADMIN") {
+      return res.status(403).json({ message: "Admin không thể đăng ký bổ sung" });
+    }
+
+    const [employees] = await database.query(
+      "SELECT employee_id, name, user_id FROM employees WHERE user_id = ?",
+      [userId]
+    );
+    if (!employees.length) {
+      return res.status(404).json({ message: "Không tìm thấy nhân viên" });
+    }
+
+    await ensureSupplementalRequestTable();
+    const requestId = Number(req.params.id);
+    const connection = await database.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [requests] = await connection.query(
+        `SELECT sr.request_id,
+                sr.shift_id,
+                sr.role_id,
+                DATE_FORMAT(sr.work_date, '%Y-%m-%d') AS work_date,
+                sr.status,
+                sh.shift_name,
+                TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+                TIME_FORMAT(sh.end_time, '%H:%i') AS end_time
+         FROM supplemental_shift_requests sr
+         JOIN shifts sh ON sr.shift_id = sh.shift_id
+         WHERE sr.request_id = ?
+         FOR UPDATE`,
+        [requestId]
+      );
+
+      const request = requests[0];
+      if (!request || request.status !== "OPEN") {
+        await connection.rollback();
+        return res.status(400).json({ message: "Yeu cau nay khong con mo" });
+      }
+
+      const employee = employees[0];
+      const [existing] = await connection.query(
+        `SELECT schedule_id
+         FROM schedules
+         WHERE employee_id = ? AND shift_id = ? AND work_date = ? AND status = 'PUBLISHED'`,
+        [employee.employee_id, request.shift_id, request.work_date]
+      );
+
+      if (existing.length) {
+        await connection.rollback();
+        return res.status(400).json({ message: "Ban da co ca lam nay" });
+      }
+
+      const [inserted] = await connection.query(
+        `INSERT INTO schedules (employee_id, shift_id, work_date, role_id, status)
+         VALUES (?, ?, ?, ?, 'PUBLISHED')`,
+        [
+          employee.employee_id,
+          request.shift_id,
+          request.work_date,
+          request.role_id || null,
+        ]
+      );
+
+      await connection.query(
+        `UPDATE supplemental_shift_requests
+         SET status = 'FILLED',
+             filled_by_employee_id = ?,
+             schedule_id = ?,
+             filled_at = NOW()
+         WHERE request_id = ?`,
+        [employee.employee_id, inserted.insertId, requestId]
+      );
+
+      await connection.commit();
+
+      const shiftText = `${request.shift_name} (${request.start_time} - ${request.end_time})`;
+      await database.query(
+        `INSERT INTO notifications (user_id, message, type, ref_id)
+         VALUES (?, ?, 'SUPPLEMENTAL_SHIFT_ACCEPTED', ?)`,
+        [
+          employee.user_id,
+          `Bạn đã đăng ký bổ sung ${shiftText} ngày ${request.work_date}.`,
+          requestId,
+        ]
+      );
+      await notifyAdmins(
+        `${employee.name} đã đăng ký bổ sung ${shiftText} ngày ${request.work_date}.`,
+        "SUPPLEMENTAL_SHIFT_ACCEPTED",
+        requestId
+      );
+
+      res.json({
+        message: "Đã đăng ký bổ sung ca làm",
+        schedule_id: inserted.insertId,
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("[acceptSupplementalRequest] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
+export async function deleteSupplementalRequest(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    const isAdmin = await requireAdmin(
+      userId,
+      res,
+      "Chỉ admin có thể xóa yêu cầu đăng ký bổ sung"
+    );
+    if (!isAdmin) return;
+
+    await ensureSupplementalRequestTable();
+    const requestId = Number(req.params.id);
+
+    const [result] = await database.query(
+      `UPDATE supplemental_shift_requests
+       SET status = 'CANCELLED'
+       WHERE request_id = ? AND status = 'OPEN'`,
+      [requestId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Không tìm thấy yêu cầu mở" });
+    }
+
+    res.json({ message: "Đã xóa yêu cầu đăng ký bổ sung" });
+  } catch (error) {
+    console.error("[deleteSupplementalRequest] Error:", error);
     res.status(500).json({ message: error.message });
   }
 }

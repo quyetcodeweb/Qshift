@@ -8,6 +8,7 @@ import {
   CalendarDaysIcon,
   ClockIcon,
   PaperAirplaneIcon,
+  PlusCircleIcon,
   UserIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -337,6 +338,33 @@ function NoteTag({ note }) {
   );
 }
 
+function SupplementalTag({ request, role, onAccept, onDelete }) {
+  const label = "Đăng ký bổ sung";
+  const detail = `${request.shift_name} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
+
+  return (
+    <button
+      type="button"
+      onClick={() => (role === "ADMIN" ? onDelete(request) : onAccept(request))}
+      title={detail}
+      className="group relative z-0 w-full rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-left text-[11px] font-black text-orange-800 shadow-sm transition hover:z-[1000] hover:-translate-y-0.5 hover:shadow-md focus:z-[1000]"
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+        <span className="min-w-0 truncate">{label}</span>
+      </span>
+      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-orange-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block group-focus:block">
+        <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-orange-200 bg-white" />
+        <span className="block font-bold text-orange-700">Đăng ký bổ sung</span>
+        <span className="mt-1 block">{detail}</span>
+        {request.role_name && (
+          <span className="mt-1 block text-gray-500">{request.role_name}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
   const [options, setOptions] = useState({
     current_employee_id: null,
@@ -657,6 +685,8 @@ export default function ShiftsCalendar() {
   const [schedules, setSchedules] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [supplementalRequests, setSupplementalRequests] = useState([]);
+  const [availableShifts, setAvailableShifts] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [activeTab, setActiveTab] = useState("calendar");
   const [viewMode, setViewMode] = useState("month");
@@ -666,11 +696,17 @@ export default function ShiftsCalendar() {
   const [swapCandidate, setSwapCandidate] = useState(null);
   const [selectedSwapTarget, setSelectedSwapTarget] = useState(null);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [supplementalModalOpen, setSupplementalModalOpen] = useState(false);
   const [noteForm, setNoteForm] = useState({
     title: "",
     dates: [],
     draftDate: "",
     color: notePalette[0],
+  });
+  const [supplementalForm, setSupplementalForm] = useState({
+    work_date: dateKey(new Date()),
+    shift_id: "",
+    count: 1,
   });
 
   const range = useMemo(() => {
@@ -693,7 +729,13 @@ export default function ShiftsCalendar() {
       setLoading(true);
       const month = cursorDate.getMonth() + 1;
       const year = cursorDate.getFullYear();
-      const [scheduleRes, attendanceRes, notesRes, adjustmentsRes] = await Promise.allSettled([
+      const [
+        scheduleRes,
+        attendanceRes,
+        notesRes,
+        supplementalRes,
+        adjustmentsRes,
+      ] = await Promise.allSettled([
         axios.get(`${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`, {
           headers: authHeaders(),
         }),
@@ -702,6 +744,10 @@ export default function ShiftsCalendar() {
           headers: authHeaders(),
         }),
         axios.get(`${API_URL}/schedules/notes`, {
+          params: range,
+          headers: authHeaders(),
+        }),
+        axios.get(`${API_URL}/schedules/supplemental-requests`, {
           params: range,
           headers: authHeaders(),
         }),
@@ -718,12 +764,16 @@ export default function ShiftsCalendar() {
           : [],
       );
       setNotes(notesRes.status === "fulfilled" ? notesRes.value.data || [] : []);
+      setSupplementalRequests(
+        supplementalRes.status === "fulfilled" ? supplementalRes.value.data || [] : [],
+      );
       setAdjustments(adjustmentsRes.status === "fulfilled" ? adjustmentsRes.value.data || [] : []);
     } catch (err) {
       console.error("[ShiftsCalendar] Load error:", err);
       setSchedules([]);
       setAttendanceRecords([]);
       setNotes([]);
+      setSupplementalRequests([]);
       setAdjustments([]);
     } finally {
       setLoading(false);
@@ -752,6 +802,15 @@ export default function ShiftsCalendar() {
       return map;
     }, new Map());
   }, [notes]);
+  const supplementalByDate = useMemo(() => {
+    return supplementalRequests.reduce((map, request) => {
+      const current = map.get(request.work_date) || [];
+      current.push(request);
+      current.sort((a, b) => shiftMinutes(a) - shiftMinutes(b));
+      map.set(request.work_date, current);
+      return map;
+    }, new Map());
+  }, [supplementalRequests]);
   const adjustmentsByEmployeeDate = useMemo(() => {
     return adjustments.reduce((map, item) => {
       const key = `${item.employee_id}-${item.work_date}`;
@@ -825,10 +884,124 @@ export default function ShiftsCalendar() {
     }
   };
 
+  const openSupplementalModal = async () => {
+    setSupplementalModalOpen(true);
+    if (availableShifts.length) return;
+
+    try {
+      const res = await axios.get(`${API_URL}/shifts`, { headers: authHeaders() });
+      const shifts = res.data || [];
+      setAvailableShifts(shifts);
+      setSupplementalForm((current) => ({
+        ...current,
+        shift_id: current.shift_id || String(shifts[0]?.shift_id || ""),
+      }));
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể tải ca làm",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
+    }
+  };
+
+  const submitSupplementalRequest = async (event) => {
+    event.preventDefault();
+
+    try {
+      await axios.post(
+        `${API_URL}/schedules/supplemental-requests`,
+        {
+          work_date: supplementalForm.work_date,
+          shift_id: supplementalForm.shift_id,
+          count: supplementalForm.count,
+        },
+        { headers: authHeaders() },
+      );
+      setSupplementalModalOpen(false);
+      window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: "Đã gửi yêu cầu bổ sung",
+        message: "Tag đã được thêm vào lịch chung.",
+      });
+      fetchSchedules();
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể gửi yêu cầu",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
+    }
+  };
+
+  const acceptSupplementalRequest = async (request) => {
+    const confirmed = await window.appConfirm?.({
+      title: "Đăng ký bổ sung",
+      message: `Bạn muốn đăng ký bổ sung làm việc ca ${request.shift_name} ngày ${request.work_date}?`,
+      confirmText: "OK",
+      cancelText: "Hủy",
+      type: "info",
+    });
+    if (!confirmed) return;
+
+    try {
+      await axios.post(
+        `${API_URL}/schedules/supplemental-requests/${request.request_id}/accept`,
+        {},
+        { headers: authHeaders() },
+      );
+      window.dispatchEvent(new Event("notification-count-changed"));
+      window.appPopup?.({
+        type: "success",
+        title: "Đã đăng ký bổ sung",
+        message: "Ca làm đã được thêm vào lịch của bạn.",
+      });
+      fetchSchedules();
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể đăng ký",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
+    }
+  };
+
+  const deleteSupplementalRequest = async (request) => {
+    const confirmed = await window.appConfirm?.({
+      title: "Xóa yêu cầu?",
+      message: `Bạn muốn xóa yêu cầu đăng ký bổ sung ca ${request.shift_name} ngày ${request.work_date}?`,
+      confirmText: "Xóa",
+      cancelText: "Hủy",
+      type: "warning",
+    });
+    if (!confirmed) return;
+
+    try {
+      await axios.delete(
+        `${API_URL}/schedules/supplemental-requests/${request.request_id}`,
+        { headers: authHeaders() },
+      );
+      window.appPopup?.({
+        type: "success",
+        title: "Đã xóa yêu cầu",
+        message: "Tag đăng ký bổ sung đã được gỡ khỏi lịch chung.",
+      });
+      fetchSchedules();
+    } catch (err) {
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể xóa yêu cầu",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
+    }
+  };
+
   const renderDayCell = (date) => {
     const key = dateKey(date);
     const items = schedulesByDate.get(key) || [];
     const dayNotes = notesByDate.get(key) || [];
+    const daySupplemental = supplementalByDate.get(key) || [];
     const isCurrentMonth = date.getMonth() === cursorDate.getMonth();
     const isToday = key === dateKey(new Date());
 
@@ -858,7 +1031,16 @@ export default function ShiftsCalendar() {
           {dayNotes.map((note) => (
             <NoteTag key={note.note_id} note={note} />
           ))}
-          {items.length === 0 && dayNotes.length === 0 ? (
+          {daySupplemental.map((request) => (
+            <SupplementalTag
+              key={request.request_id}
+              request={request}
+              role={role}
+              onAccept={acceptSupplementalRequest}
+              onDelete={deleteSupplementalRequest}
+            />
+          ))}
+          {items.length === 0 && dayNotes.length === 0 && daySupplemental.length === 0 ? (
             <div className="rounded-md border border-dashed border-gray-200 py-3 text-center text-[11px] font-semibold text-gray-400">
               Trống
             </div>
@@ -903,6 +1085,16 @@ export default function ShiftsCalendar() {
               >
                 <PaperAirplaneIcon className="h-5 w-5" />
                 Gửi thông báo
+              </button>
+            )}
+            {role === "ADMIN" && (
+              <button
+                type="button"
+                onClick={openSupplementalModal}
+                className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700"
+              >
+                <PlusCircleIcon className="h-5 w-5" />
+                Yêu cầu đăng ký bổ sung
               </button>
             )}
             {role === "EMPLOYEE" && (
@@ -1007,7 +1199,18 @@ export default function ShiftsCalendar() {
               {(notesByDate.get(dateKey(cursorDate)) || []).map((note) => (
                 <NoteTag key={note.note_id} note={note} />
               ))}
-              {visibleSchedules.length === 0 && !(notesByDate.get(dateKey(cursorDate)) || []).length ? (
+              {(supplementalByDate.get(dateKey(cursorDate)) || []).map((request) => (
+                <SupplementalTag
+                  key={request.request_id}
+                  request={request}
+                  role={role}
+                  onAccept={acceptSupplementalRequest}
+                  onDelete={deleteSupplementalRequest}
+                />
+              ))}
+              {visibleSchedules.length === 0 &&
+              !(notesByDate.get(dateKey(cursorDate)) || []).length &&
+              !(supplementalByDate.get(dateKey(cursorDate)) || []).length ? (
                 <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-10 text-center text-sm font-semibold text-gray-500">
                   Không có ca trong ngày này
                 </div>
@@ -1079,6 +1282,100 @@ export default function ShiftsCalendar() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {supplementalModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/30 p-3 backdrop-blur-sm sm:items-center">
+          <form onSubmit={submitSupplementalRequest} className="w-full max-w-md rounded-md bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-950">Yêu cầu đăng ký bổ sung</h2>
+                <p className="mt-1 text-sm text-gray-600">Tag sẽ hiển thị tại ngày và ca đã chọn.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSupplementalModalOpen(false)}
+                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-950"
+                aria-label="Đóng"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="mt-4 block text-sm font-semibold text-gray-700">
+              Ngày
+              <input
+                type="date"
+                value={supplementalForm.work_date}
+                onChange={(event) =>
+                  setSupplementalForm((current) => ({
+                    ...current,
+                    work_date: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-orange-600"
+                required
+              />
+            </label>
+
+            <label className="mt-3 block text-sm font-semibold text-gray-700">
+              Ca
+              <select
+                value={supplementalForm.shift_id}
+                onChange={(event) =>
+                  setSupplementalForm((current) => ({
+                    ...current,
+                    shift_id: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm font-medium outline-none transition focus:border-orange-600"
+                required
+              >
+                <option value="">Chọn ca</option>
+                {availableShifts.map((shift) => (
+                  <option key={shift.shift_id} value={shift.shift_id}>
+                    {shift.shift_name} ({formatTime(shift.start_time)} - {formatTime(shift.end_time)})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="mt-3 block text-sm font-semibold text-gray-700">
+              Số lượng tag
+              <input
+                type="number"
+                min="1"
+                value={supplementalForm.count}
+                onChange={(event) =>
+                  setSupplementalForm((current) => ({
+                    ...current,
+                    count: Math.max(1, Number(event.target.value) || 1),
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-orange-600"
+                required
+              />
+            </label>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSupplementalModalOpen(false)}
+                className="rounded-md px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={!supplementalForm.work_date || !supplementalForm.shift_id}
+                className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                <PlusCircleIcon className="h-4 w-4" />
+                Gửi yêu cầu
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
