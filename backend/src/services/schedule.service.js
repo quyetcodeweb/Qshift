@@ -116,7 +116,7 @@ export async function generateSchedule({
       schedulingSettingsOverride || settings
     );
     console.log(
-      `[generateSchedule] Scheduling settings: balance=${schedulingSettings.balance_scheduling}, consecutive=${schedulingSettings.prefer_consecutive_shifts}, workday=${schedulingSettings.balance_by_workday}, roleFallback=${schedulingSettings.allow_role_fallback}`
+      `[generateSchedule] Scheduling settings: balance=${schedulingSettings.balance_scheduling}, consecutive=${schedulingSettings.prefer_consecutive_shifts}, workday=${schedulingSettings.balance_by_workday}, roleFallback=${schedulingSettings.allow_role_fallback}, productivity=${schedulingSettings.productivity_attention}`
     );
 
     // ✅ NEW: Load published shifts to prevent duplicates
@@ -535,7 +535,8 @@ function normalizeScheduleSettings(settings = {}) {
       settings.prefer_consecutive_shifts
     ),
     balance_by_workday: normalizeDbBoolean(settings.balance_by_workday),
-    allow_role_fallback: normalizeDbBoolean(settings.allow_role_fallback)
+    allow_role_fallback: normalizeDbBoolean(settings.allow_role_fallback),
+    productivity_attention: normalizeDbBoolean(settings.productivity_attention)
   };
 }
 
@@ -581,6 +582,97 @@ function getShiftOrderIndex(shiftId, shiftDetails) {
   return sortedShiftIds.indexOf(Number(shiftId));
 }
 
+function shiftDateTime(dateStr, timeValue) {
+  const [hours = 0, minutes = 0, seconds = 0] = String(timeValue || "00:00:00")
+    .split(":")
+    .map(Number);
+  const date = new Date(`${dateStr}T00:00:00`);
+  date.setHours(hours, minutes, seconds, 0);
+  return date;
+}
+
+function getShiftBoundsForAssignment(assignment, shiftDetails) {
+  const shift = shiftDetails.find(
+    (item) => Number(item.shift_id) === Number(assignment.shift_id)
+  );
+  if (!shift) return null;
+
+  const start = shiftDateTime(assignment.work_date, shift.start_time);
+  const end = shiftDateTime(assignment.work_date, shift.end_time);
+  if (end <= start) {
+    end.setDate(end.getDate() + 1);
+  }
+
+  return { start, end };
+}
+
+function getConsecutiveShiftCountIfAssigned({
+  empId,
+  dateStr,
+  shiftId,
+  generatedSchedule,
+  shiftDetails
+}) {
+  const candidate = {
+    employee_id: Number(empId),
+    shift_id: Number(shiftId),
+    work_date: dateStr,
+    isCandidate: true
+  };
+  const assignments = [
+    ...generatedSchedule.filter((item) => Number(item.employee_id) === Number(empId)),
+    candidate
+  ]
+    .map((item) => ({
+      ...item,
+      bounds: getShiftBoundsForAssignment(item, shiftDetails)
+    }))
+    .filter((item) => item.bounds)
+    .sort((a, b) => a.bounds.start - b.bounds.start);
+
+  const toleranceMs = 15 * 60 * 1000;
+  const candidateIndex = assignments.findIndex((item) => item.isCandidate);
+  if (candidateIndex < 0) return 1;
+
+  let consecutiveCount = 1;
+
+  for (let index = candidateIndex - 1; index >= 0; index -= 1) {
+    const previous = assignments[index];
+    const current = assignments[index + 1];
+    const gap = current.bounds.start.getTime() - previous.bounds.end.getTime();
+    if (gap < 0 || gap > toleranceMs) break;
+    consecutiveCount += 1;
+  }
+
+  for (let index = candidateIndex + 1; index < assignments.length; index += 1) {
+    const previous = assignments[index - 1];
+    const current = assignments[index];
+    const gap = current.bounds.start.getTime() - previous.bounds.end.getTime();
+    if (gap < 0 || gap > toleranceMs) break;
+    consecutiveCount += 1;
+  }
+
+  return consecutiveCount;
+}
+
+function getProductivityFatigueRank({
+  empId,
+  dateStr,
+  shiftId,
+  generatedSchedule,
+  shiftDetails
+}) {
+  const consecutiveCount = getConsecutiveShiftCountIfAssigned({
+    empId,
+    dateStr,
+    shiftId,
+    generatedSchedule,
+    shiftDetails
+  });
+
+  return consecutiveCount >= 3 ? 1 : 0;
+}
+
 function getConsecutivePreferenceRank({
   empId,
   dateStr,
@@ -621,6 +713,26 @@ function sortCandidatesForSettings({
   settings
 }) {
   return [...candidates].sort((a, b) => {
+    if (settings.productivity_attention) {
+      const productivityDiff =
+        getProductivityFatigueRank({
+          empId: a.employee_id,
+          dateStr,
+          shiftId,
+          generatedSchedule,
+          shiftDetails
+        }) -
+        getProductivityFatigueRank({
+          empId: b.employee_id,
+          dateStr,
+          shiftId,
+          generatedSchedule,
+          shiftDetails
+        });
+
+      if (productivityDiff !== 0) return productivityDiff;
+    }
+
     if (settings.balance_by_workday) {
       const workdayDiff =
         (employeeGeneratedWorkdayCount[a.employee_id] || 0) -

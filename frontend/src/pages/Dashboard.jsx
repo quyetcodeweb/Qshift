@@ -156,19 +156,22 @@ function getUpcomingBirthdays(employees) {
       const birthday = getEmployeeBirthday(employee);
       if (!birthday) return null;
 
-      const date = new Date(birthday);
-      if (Number.isNaN(date.getTime())) return null;
+      const [birthYear, birthMonth, birthDay] = String(birthday)
+        .slice(0, 10)
+        .split("-")
+        .map(Number);
+      if (!birthYear || !birthMonth || !birthDay) return null;
 
       let nextBirthday = new Date(
         start.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
+        birthMonth - 1,
+        birthDay,
       );
       if (nextBirthday < start) {
         nextBirthday = new Date(
           start.getFullYear() + 1,
-          date.getMonth(),
-          date.getDate(),
+          birthMonth - 1,
+          birthDay,
         );
       }
 

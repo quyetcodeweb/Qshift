@@ -55,6 +55,7 @@ async function ensureScheduleSettingsColumns() {
       prefer_consecutive_shifts BOOLEAN DEFAULT FALSE,
       balance_by_workday BOOLEAN DEFAULT FALSE,
       allow_role_fallback BOOLEAN DEFAULT FALSE,
+      productivity_attention BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
@@ -68,6 +69,11 @@ async function ensureScheduleSettingsColumns() {
   await ensureColumnExists(
     "schedule_settings",
     "allow_role_fallback",
+    "BOOLEAN DEFAULT FALSE"
+  );
+  await ensureColumnExists(
+    "schedule_settings",
+    "productivity_attention",
     "BOOLEAN DEFAULT FALSE"
   );
 }
@@ -163,6 +169,89 @@ function normalizeWorkDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
+function vietnamDateKey() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+async function ensureSupplementalRequestIsFuture(request) {
+  if (request.work_date < vietnamDateKey()) {
+    throw badRequest("Không thể gửi yêu cầu bổ sung cho ngày đã qua");
+  }
+
+  const [rows] = await database.query(
+    `SELECT shift_name,
+            TIME_FORMAT(start_time, '%H:%i') AS start_time,
+            TIMESTAMP(?, start_time) <= CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+07:00') AS is_expired
+     FROM shifts
+     WHERE shift_id = ?`,
+    [request.work_date, request.shift_id]
+  );
+
+  if (!rows.length) {
+    throw badRequest("Ca làm không tồn tại");
+  }
+
+  if (Number(rows[0].is_expired) === 1) {
+    throw badRequest(
+      `Không thể gửi yêu cầu bổ sung cho ${rows[0].shift_name} vì ca đã bắt đầu hoặc đã qua`
+    );
+  }
+}
+
+async function cancelExpiredSupplementalRequests() {
+  await ensureSupplementalRequestTable();
+
+  const [expiredRequests] = await database.query(
+    `SELECT sr.request_id,
+            DATE_FORMAT(sr.work_date, '%Y-%m-%d') AS work_date,
+            sh.shift_name,
+            TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+            TIME_FORMAT(sh.end_time, '%H:%i') AS end_time
+     FROM supplemental_shift_requests sr
+     JOIN shifts sh ON sr.shift_id = sh.shift_id
+     WHERE sr.status = 'OPEN'
+       AND TIMESTAMP(sr.work_date, sh.start_time) <= CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+07:00')
+     ORDER BY sr.work_date ASC, sh.start_time ASC`
+  );
+
+  if (!expiredRequests.length) {
+    return 0;
+  }
+
+  const ids = expiredRequests.map((request) => request.request_id);
+  const placeholders = ids.map(() => "?").join(",");
+  await database.query(
+    `UPDATE supplemental_shift_requests
+     SET status = 'CANCELLED_EXPIRED'
+     WHERE request_id IN (${placeholders}) AND status = 'OPEN'`,
+    ids
+  );
+
+  const preview = expiredRequests
+    .slice(0, 5)
+    .map(
+      (request) =>
+        `${request.shift_name} (${request.start_time} - ${request.end_time}) ngày ${request.work_date}`
+    )
+    .join("; ");
+  const suffix =
+    expiredRequests.length > 5 ? ` và ${expiredRequests.length - 5} yêu cầu khác` : "";
+
+  await notifyAdmins(
+    `Đã tự động hủy ${expiredRequests.length} yêu cầu đăng ký bổ sung vì đã qua thời gian ca làm: ${preview}${suffix}.`,
+    "SUPPLEMENTAL_SHIFT_EXPIRED",
+    ids[0] || null
+  );
+
+  return expiredRequests.length;
+}
+
 async function notifyEmployees(message, type, refId = null) {
   const [employees] = await database.query(
     "SELECT user_id FROM employees WHERE user_id IS NOT NULL"
@@ -205,6 +294,10 @@ async function createSupplementalRequests({
       count: Math.max(1, Number(request.count) || 1),
     }))
     .filter((request) => request.shift_id > 0 && request.work_date);
+
+  for (const request of normalizedRequests) {
+    await ensureSupplementalRequestIsFuture(request);
+  }
 
   let created = 0;
   const createdIds = [];
@@ -388,7 +481,7 @@ export async function publishSchedule(req, res) {
     });
   } catch (error) {
     console.error("[publishSchedule] Error:", error);
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 }
 
@@ -548,6 +641,7 @@ export async function createScheduleNote(req, res) {
 export async function getSupplementalRequests(req, res) {
   try {
     await ensureSupplementalRequestTable();
+    await cancelExpiredSupplementalRequests();
 
     const conditions = ["sr.status = 'OPEN'"];
     const params = [];
@@ -589,6 +683,8 @@ export async function getSupplementalRequests(req, res) {
 
 export async function createSupplementalRequest(req, res) {
   try {
+    await cancelExpiredSupplementalRequests();
+
     const userId = req.user?.user_id;
     const isAdmin = await requireAdmin(
       userId,
@@ -624,12 +720,14 @@ export async function createSupplementalRequest(req, res) {
     });
   } catch (error) {
     console.error("[createSupplementalRequest] Error:", error);
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 }
 
 export async function acceptSupplementalRequest(req, res) {
   try {
+    await cancelExpiredSupplementalRequests();
+
     const userId = req.user?.user_id;
     const role = await getUserRole(userId);
 
@@ -1341,6 +1439,7 @@ export async function getScheduleSettings(req, res) {
         prefer_consecutive_shifts: false,
         balance_by_workday: false,
         allow_role_fallback: false,
+        productivity_attention: false,
       });
     }
 
@@ -1349,6 +1448,7 @@ export async function getScheduleSettings(req, res) {
       prefer_consecutive_shifts: settings[0].prefer_consecutive_shifts || false,
       balance_by_workday: settings[0].balance_by_workday || false,
       allow_role_fallback: settings[0].allow_role_fallback || false,
+      productivity_attention: settings[0].productivity_attention || false,
     });
   } catch (error) {
     console.error("[getScheduleSettings] Error:", error);
@@ -1363,9 +1463,11 @@ export async function saveScheduleSettings(req, res) {
       prefer_consecutive_shifts,
       balance_by_workday,
       allow_role_fallback,
+      productivity_attention,
     } = req.body;
     const balanceByWorkday = balance_by_workday ?? false;
     const allowRoleFallback = allow_role_fallback ?? false;
+    const productivityAttention = productivity_attention ?? false;
     const userId = req.user?.user_id;
 
     // Validate admin role
@@ -1385,6 +1487,7 @@ export async function saveScheduleSettings(req, res) {
       prefer_consecutive_shifts,
       balance_by_workday: balanceByWorkday,
       allow_role_fallback: allowRoleFallback,
+      productivity_attention: productivityAttention,
     });
 
     // Check if settings exist
@@ -1394,23 +1497,25 @@ export async function saveScheduleSettings(req, res) {
 
     if (existing.length === 0) {
       await database.query(
-        `INSERT INTO schedule_settings (balance_scheduling, prefer_consecutive_shifts, balance_by_workday, allow_role_fallback)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO schedule_settings (balance_scheduling, prefer_consecutive_shifts, balance_by_workday, allow_role_fallback, productivity_attention)
+         VALUES (?, ?, ?, ?, ?)`,
         [
           balance_scheduling,
           prefer_consecutive_shifts,
           balanceByWorkday,
           allowRoleFallback,
+          productivityAttention,
         ]
       );
     } else {
       await database.query(
-        `UPDATE schedule_settings SET balance_scheduling = ?, prefer_consecutive_shifts = ?, balance_by_workday = ?, allow_role_fallback = ?`,
+        `UPDATE schedule_settings SET balance_scheduling = ?, prefer_consecutive_shifts = ?, balance_by_workday = ?, allow_role_fallback = ?, productivity_attention = ?`,
         [
           balance_scheduling,
           prefer_consecutive_shifts,
           balanceByWorkday,
           allowRoleFallback,
+          productivityAttention,
         ]
       );
     }

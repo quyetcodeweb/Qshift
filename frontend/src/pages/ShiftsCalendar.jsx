@@ -752,6 +752,7 @@ export default function ShiftsCalendar() {
     shift_id: "",
     count: 1,
   });
+  const todayKey = dateKey(new Date());
 
   const range = useMemo(() => {
     if (viewMode === "day") {
@@ -993,6 +994,15 @@ export default function ShiftsCalendar() {
 
   const submitSupplementalRequest = async (event) => {
     event.preventDefault();
+
+    if (supplementalForm.work_date < todayKey) {
+      window.appPopup?.({
+        type: "error",
+        title: "Ngày không hợp lệ",
+        message: "Không thể gửi yêu cầu bổ sung cho ngày đã qua.",
+      });
+      return;
+    }
 
     try {
       await axios.post(
@@ -1433,6 +1443,7 @@ export default function ShiftsCalendar() {
               <input
                 type="date"
                 value={supplementalForm.work_date}
+                min={todayKey}
                 onChange={(event) =>
                   setSupplementalForm((current) => ({
                     ...current,
@@ -1495,7 +1506,9 @@ export default function ShiftsCalendar() {
               <button
                 type="submit"
                 disabled={
-                  !supplementalForm.work_date || !supplementalForm.shift_id
+                  !supplementalForm.work_date ||
+                  supplementalForm.work_date < todayKey ||
+                  !supplementalForm.shift_id
                 }
                 className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
               >

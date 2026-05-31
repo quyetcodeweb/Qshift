@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS schedule_settings (
   prefer_consecutive_shifts BOOLEAN DEFAULT FALSE COMMENT 'Prefer consecutive shifts for employees',
   balance_by_workday BOOLEAN DEFAULT FALSE COMMENT 'Balance by number of working days in generated schedule',
   allow_role_fallback BOOLEAN DEFAULT FALSE COMMENT 'Allow filling missing role slots with other available employees',
+  productivity_attention BOOLEAN DEFAULT FALSE COMMENT 'Avoid assigning 3 consecutive shifts to the same employee when alternatives exist',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

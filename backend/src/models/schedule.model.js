@@ -115,7 +115,8 @@ export async function getScheduleSettings() {
     balance_scheduling: false,
     prefer_consecutive_shifts: false,
     balance_by_workday: false,
-    allow_role_fallback: false
+    allow_role_fallback: false,
+    productivity_attention: false
   };
 }
 

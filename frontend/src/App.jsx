@@ -19,13 +19,11 @@ import { isLoggedIn } from "./utils/auth";
 function App() {
   return (
     <Routes>
-      {/* 🔥 Nếu chưa login → luôn về login */}
       <Route
         path="/login"
         element={isLoggedIn() ? <Navigate to="/" /> : <Login />}
       />
 
-      {/* 🔥 Protected */}
       <Route
         path="/"
         element={
@@ -36,7 +34,7 @@ function App() {
       >
         <Route index element={<Dashboard />} />
 
-        {/* ADMIN ONLY */}
+        {/* ADMIN */}
         <Route
           path="statistics"
           element={
@@ -59,7 +57,10 @@ function App() {
 
         <Route path="userPage" element={<Navigate to="/employeePage" />} />
 
-        <Route path="shiftManagement" element={<Navigate to="/createSchedule" />} />
+        <Route
+          path="shiftManagement"
+          element={<Navigate to="/createSchedule" />}
+        />
 
         <Route
           path="shiftSwaps"

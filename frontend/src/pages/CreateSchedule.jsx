@@ -49,6 +49,7 @@ const defaultSettings = {
   prefer_consecutive_shifts: false,
   balance_by_workday: false,
   allow_role_fallback: false,
+  productivity_attention: false,
 };
 const settingRows = [
   {
@@ -70,6 +71,11 @@ const settingRows = [
     key: "allow_role_fallback",
     title: "Bù vai trò thiếu",
     note: "Khi thiếu đúng vai trò bắt buộc, hệ thống có thể dùng nhân viên rảnh khác để bù tạm.",
+  },
+  {
+    key: "productivity_attention",
+    title: "Chú ý năng suất",
+    note: "Hạn chế xếp một nhân viên làm 3 ca liên tục khi vẫn còn nhân viên khác thay thế. Nếu không có người phù hợp, hệ thống vẫn xếp để tránh thiếu ca.",
   },
 ];
 
