@@ -130,7 +130,9 @@ function scheduleStart(schedule) {
 }
 
 function normalizeColor(value) {
-  const raw = String(value || "").trim().toLowerCase();
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
   if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
   if (/^#[0-9a-f]{3}$/i.test(raw)) {
     return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
@@ -182,7 +184,8 @@ function formatMoneyCompact(value) {
   const number = Number(value || 0);
   if (!number) return "";
   const abs = Math.abs(number);
-  if (abs >= 1000000) return `${number > 0 ? "+" : "-"}${Math.round(abs / 100000) / 10}tr`;
+  if (abs >= 1000000)
+    return `${number > 0 ? "+" : "-"}${Math.round(abs / 100000) / 10}tr`;
   if (abs >= 1000) return `${number > 0 ? "+" : "-"}${Math.round(abs / 1000)}k`;
   return `${number > 0 ? "+" : "-"}${abs.toLocaleString("vi-VN")}đ`;
 }
@@ -267,7 +270,9 @@ function ScheduleTag({
         ? `${schedule.employee_name} · ${schedule.shift_name}`
         : `${schedule.employee_name} · ${schedule.shift_name} · ${formatTime(schedule.start_time)}-${formatTime(schedule.end_time)}`;
   const adjustment =
-    adjustmentsByEmployeeDate.get(`${schedule.employee_id}-${schedule.work_date}`) || 0;
+    adjustmentsByEmployeeDate.get(
+      `${schedule.employee_id}-${schedule.work_date}`,
+    ) || 0;
 
   return (
     <button
@@ -287,7 +292,9 @@ function ScheduleTag({
         />
         <span className="min-w-0 truncate">{label}</span>
         {adjustment !== 0 && (
-          <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${adjustment > 0 ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
+          <span
+            className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${adjustment > 0 ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}
+          >
             {formatMoneyCompact(adjustment)}
           </span>
         )}
@@ -296,7 +303,9 @@ function ScheduleTag({
       {role === "ADMIN" && (
         <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-gray-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block">
           <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-gray-200 bg-white" />
-          <span className="block font-bold text-gray-950">{schedule.employee_name}</span>
+          <span className="block font-bold text-gray-950">
+            {schedule.employee_name}
+          </span>
           <span className="mt-1 block">{schedule.shift_name}</span>
           <span className="mt-1 block">
             {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
@@ -305,7 +314,9 @@ function ScheduleTag({
             {borderLabel(schedule, attendanceByScheduleId)}
           </span>
           {adjustment !== 0 && (
-            <span className={`mt-2 block font-bold ${adjustment > 0 ? "text-emerald-700" : "text-red-700"}`}>
+            <span
+              className={`mt-2 block font-bold ${adjustment > 0 ? "text-emerald-700" : "text-red-700"}`}
+            >
               Thưởng/phạt: {formatMoneyCompact(adjustment)}
             </span>
           )}
@@ -326,7 +337,10 @@ function NoteTag({ note }) {
       style={{ backgroundColor: tone.background, color: tone.text }}
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: tone.dot }}
+        />
         <span className="min-w-0 truncate">{note.title}</span>
       </span>
       <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-gray-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block group-focus:block">
@@ -339,7 +353,8 @@ function NoteTag({ note }) {
 }
 
 function SupplementalTag({ request, role, onAccept, onDelete }) {
-  const label = "Đăng ký bổ sung";
+  const tone = shiftTone(request);
+  const label = `Bổ sung`;
   const detail = `${request.shift_name} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
 
   return (
@@ -347,14 +362,20 @@ function SupplementalTag({ request, role, onAccept, onDelete }) {
       type="button"
       onClick={() => (role === "ADMIN" ? onDelete(request) : onAccept(request))}
       title={detail}
-      className="group relative z-0 w-full rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-left text-[11px] font-black text-orange-800 shadow-sm transition hover:z-[1000] hover:-translate-y-0.5 hover:shadow-md focus:z-[1000]"
+      className="group relative z-0 w-full rounded-md border border-orange-500 bg-orange-50 px-2 py-1.5 text-left text-[11px] font-black text-orange-800 shadow-sm transition hover:z-[1000] hover:-translate-y-0.5 hover:shadow-md focus:z-[1000]"
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
         <span className="min-w-0 truncate">{label}</span>
+        <span
+          className="ml-auto max-w-[45%] shrink-0 truncate rounded px-1.5 py-0.5 text-[10px] font-black"
+          style={{ backgroundColor: tone.background, color: tone.text }}
+        >
+          {request.shift_name}
+        </span>
       </span>
-      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-orange-200 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block group-focus:block">
-        <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-orange-200 bg-white" />
+      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 z-[999] hidden w-64 rounded-md border border-orange-500 bg-white p-3 text-xs font-medium text-gray-700 shadow-2xl ring-1 ring-gray-950/5 group-hover:block group-focus:block">
+        <span className="absolute -bottom-1.5 left-4 h-3 w-3 rotate-45 border-b border-r border-orange-500 bg-white" />
         <span className="block font-bold text-orange-700">Đăng ký bổ sung</span>
         <span className="mt-1 block">{detail}</span>
         {request.role_name && (
@@ -428,7 +449,9 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
   }, [options.current_employee_id, options.schedules]);
 
   const requesterDates = useMemo(() => {
-    return Array.from(new Set(mySchedules.map((schedule) => schedule.work_date))).sort();
+    return Array.from(
+      new Set(mySchedules.map((schedule) => schedule.work_date)),
+    ).sort();
   }, [mySchedules]);
 
   const mySchedulesForDate = useMemo(() => {
@@ -480,7 +503,12 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
     }
 
     return schedulesForDate;
-  }, [form.target_employee_id, form.target_work_date, initialTarget, options.schedules]);
+  }, [
+    form.target_employee_id,
+    form.target_work_date,
+    initialTarget,
+    options.schedules,
+  ]);
 
   const sentRequests = useMemo(() => {
     return requests.filter(
@@ -527,7 +555,10 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-      <form onSubmit={submitRequest} className="space-y-3 rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+      <form
+        onSubmit={submitRequest}
+        className="space-y-3 rounded-md border border-gray-200 bg-white p-4 shadow-sm"
+      >
         <h2 className="text-lg font-bold text-gray-950">Gửi yêu cầu đổi ca</h2>
 
         {[
@@ -535,7 +566,10 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
             label: "Ngày ca của bạn",
             value: form.requester_work_date,
             disabled: false,
-            options: requesterDates.map((date) => ({ value: date, label: date })),
+            options: requesterDates.map((date) => ({
+              value: date,
+              label: date,
+            })),
             onChange: (value) =>
               setForm({
                 ...form,
@@ -551,7 +585,8 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
               value: schedule.schedule_id,
               label: formatShift(schedule),
             })),
-            onChange: (value) => setForm({ ...form, requester_schedule_id: value }),
+            onChange: (value) =>
+              setForm({ ...form, requester_schedule_id: value }),
           },
           {
             label: "Nhân viên cần đổi",
@@ -589,10 +624,14 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
               value: schedule.schedule_id,
               label: formatShift(schedule),
             })),
-            onChange: (value) => setForm({ ...form, target_schedule_id: value }),
+            onChange: (value) =>
+              setForm({ ...form, target_schedule_id: value }),
           },
         ].map((field) => (
-          <label key={field.label} className="block text-sm font-semibold text-gray-700">
+          <label
+            key={field.label}
+            className="block text-sm font-semibold text-gray-700"
+          >
             {field.label}
             <select
               value={field.value}
@@ -634,7 +673,9 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
       </form>
 
       <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-bold text-gray-950">Lịch sử yêu cầu đã gửi</h2>
+        <h2 className="mb-3 text-lg font-bold text-gray-950">
+          Lịch sử yêu cầu đã gửi
+        </h2>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-gray-50 text-gray-700">
@@ -657,11 +698,14 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
               ) : (
                 sentRequests.map((request) => (
                   <tr key={request.swap_request_id} className="border-b">
-                    <td className="p-3">{new Date(request.created_at).toLocaleString("vi-VN")}</td>
+                    <td className="p-3">
+                      {new Date(request.created_at).toLocaleString("vi-VN")}
+                    </td>
                     <td className="p-3">{request.requester_employee_name}</td>
                     <td className="p-3">{request.target_employee_name}</td>
                     <td className="p-3">
-                      {request.requester_work_date} - {request.requester_shift_name}
+                      {request.requester_work_date} -{" "}
+                      {request.requester_shift_name}
                     </td>
                     <td className="p-3">
                       {request.target_work_date} - {request.target_shift_name}
@@ -721,7 +765,10 @@ export default function ShiftsCalendar() {
     }
 
     const start = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
-    return { startDate: dateKey(start), endDate: dateKey(endOfMonth(cursorDate)) };
+    return {
+      startDate: dateKey(start),
+      endDate: dateKey(endOfMonth(cursorDate)),
+    };
   }, [cursorDate, viewMode]);
 
   const fetchSchedules = useCallback(async () => {
@@ -736,9 +783,12 @@ export default function ShiftsCalendar() {
         supplementalRes,
         adjustmentsRes,
       ] = await Promise.allSettled([
-        axios.get(`${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`, {
-          headers: authHeaders(),
-        }),
+        axios.get(
+          `${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`,
+          {
+            headers: authHeaders(),
+          },
+        ),
         axios.get(`${API_URL}/attendance/history`, {
           params: range,
           headers: authHeaders(),
@@ -757,17 +807,27 @@ export default function ShiftsCalendar() {
         }),
       ]);
 
-      setSchedules(scheduleRes.status === "fulfilled" ? scheduleRes.value.data || [] : []);
+      setSchedules(
+        scheduleRes.status === "fulfilled" ? scheduleRes.value.data || [] : [],
+      );
       setAttendanceRecords(
         attendanceRes.status === "fulfilled"
           ? attendanceRes.value.data?.records || []
           : [],
       );
-      setNotes(notesRes.status === "fulfilled" ? notesRes.value.data || [] : []);
-      setSupplementalRequests(
-        supplementalRes.status === "fulfilled" ? supplementalRes.value.data || [] : [],
+      setNotes(
+        notesRes.status === "fulfilled" ? notesRes.value.data || [] : [],
       );
-      setAdjustments(adjustmentsRes.status === "fulfilled" ? adjustmentsRes.value.data || [] : []);
+      setSupplementalRequests(
+        supplementalRes.status === "fulfilled"
+          ? supplementalRes.value.data || []
+          : [],
+      );
+      setAdjustments(
+        adjustmentsRes.status === "fulfilled"
+          ? adjustmentsRes.value.data || []
+          : [],
+      );
     } catch (err) {
       console.error("[ShiftsCalendar] Load error:", err);
       setSchedules([]);
@@ -789,11 +849,16 @@ export default function ShiftsCalendar() {
 
     axios
       .get(`${API_URL}/shift-swaps/options`, { headers: authHeaders() })
-      .then((res) => setCurrentEmployeeId(res.data?.current_employee_id || null))
+      .then((res) =>
+        setCurrentEmployeeId(res.data?.current_employee_id || null),
+      )
       .catch(() => setCurrentEmployeeId(null));
   }, [role]);
 
-  const schedulesByDate = useMemo(() => groupSchedulesByDate(schedules), [schedules]);
+  const schedulesByDate = useMemo(
+    () => groupSchedulesByDate(schedules),
+    [schedules],
+  );
   const notesByDate = useMemo(() => {
     return notes.reduce((map, note) => {
       const current = map.get(note.work_date) || [];
@@ -814,7 +879,10 @@ export default function ShiftsCalendar() {
   const adjustmentsByEmployeeDate = useMemo(() => {
     return adjustments.reduce((map, item) => {
       const key = `${item.employee_id}-${item.work_date}`;
-      const signed = item.type === "PENALTY" ? -Number(item.amount || 0) : Number(item.amount || 0);
+      const signed =
+        item.type === "PENALTY"
+          ? -Number(item.amount || 0)
+          : Number(item.amount || 0);
       map.set(key, (map.get(key) || 0) + signed);
       return map;
     }, new Map());
@@ -857,7 +925,8 @@ export default function ShiftsCalendar() {
   };
 
   const addNoteDate = () => {
-    if (!noteForm.draftDate || noteForm.dates.includes(noteForm.draftDate)) return;
+    if (!noteForm.draftDate || noteForm.dates.includes(noteForm.draftDate))
+      return;
     setNoteForm((current) => ({
       ...current,
       dates: [...current.dates, current.draftDate].sort(),
@@ -867,7 +936,9 @@ export default function ShiftsCalendar() {
 
   const submitScheduleNote = async (event) => {
     event.preventDefault();
-    const dates = [...new Set([...noteForm.dates, noteForm.draftDate].filter(Boolean))].sort();
+    const dates = [
+      ...new Set([...noteForm.dates, noteForm.draftDate].filter(Boolean)),
+    ].sort();
     try {
       await axios.post(
         `${API_URL}/schedules/notes`,
@@ -875,12 +946,25 @@ export default function ShiftsCalendar() {
         { headers: authHeaders() },
       );
       setNoteModalOpen(false);
-      setNoteForm({ title: "", dates: [], draftDate: "", color: notePalette[0] });
+      setNoteForm({
+        title: "",
+        dates: [],
+        draftDate: "",
+        color: notePalette[0],
+      });
       window.dispatchEvent(new Event("notification-count-changed"));
-      window.appPopup?.({ type: "success", title: "Đã gửi thông báo", message: `Đã gắn tag cho ${dates.length} ngày.` });
+      window.appPopup?.({
+        type: "success",
+        title: "Đã gửi thông báo",
+        message: `Đã gắn tag cho ${dates.length} ngày.`,
+      });
       fetchSchedules();
     } catch (err) {
-      window.appPopup?.({ type: "error", title: "Không thể gửi thông báo", message: err.response?.data?.message || "Vui lòng thử lại." });
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể gửi thông báo",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
     }
   };
 
@@ -889,7 +973,9 @@ export default function ShiftsCalendar() {
     if (availableShifts.length) return;
 
     try {
-      const res = await axios.get(`${API_URL}/shifts`, { headers: authHeaders() });
+      const res = await axios.get(`${API_URL}/shifts`, {
+        headers: authHeaders(),
+      });
       const shifts = res.data || [];
       setAvailableShifts(shifts);
       setSupplementalForm((current) => ({
@@ -1009,7 +1095,9 @@ export default function ShiftsCalendar() {
       <div
         key={key}
         className={`relative z-0 min-h-[132px] overflow-visible rounded-md border border-gray-200 bg-white p-2 hover:z-[900] ${
-          viewMode === "month" && !isCurrentMonth ? "bg-gray-50 text-gray-400" : ""
+          viewMode === "month" && !isCurrentMonth
+            ? "bg-gray-50 text-gray-400"
+            : ""
         }`}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -1040,7 +1128,9 @@ export default function ShiftsCalendar() {
               onDelete={deleteSupplementalRequest}
             />
           ))}
-          {items.length === 0 && dayNotes.length === 0 && daySupplemental.length === 0 ? (
+          {items.length === 0 &&
+          dayNotes.length === 0 &&
+          daySupplemental.length === 0 ? (
             <div className="rounded-md border border-dashed border-gray-200 py-3 text-center text-[11px] font-semibold text-gray-400">
               Trống
             </div>
@@ -1103,7 +1193,9 @@ export default function ShiftsCalendar() {
                   type="button"
                   onClick={() => setActiveTab("calendar")}
                   className={`rounded px-3 py-2 text-sm font-bold ${
-                    activeTab === "calendar" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600"
+                    activeTab === "calendar"
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "text-gray-600"
                   }`}
                 >
                   Lịch chung
@@ -1112,7 +1204,9 @@ export default function ShiftsCalendar() {
                   type="button"
                   onClick={() => setActiveTab("swap")}
                   className={`rounded px-3 py-2 text-sm font-bold ${
-                    activeTab === "swap" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600"
+                    activeTab === "swap"
+                      ? "bg-white text-blue-700 shadow-sm"
+                      : "text-gray-600"
                   }`}
                 >
                   Đổi ca
@@ -1165,7 +1259,9 @@ export default function ShiftsCalendar() {
                 className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 transition hover:bg-gray-50"
                 aria-label="Làm mới"
               >
-                <ArrowPathIcon className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+                <ArrowPathIcon
+                  className={`h-5 w-5 ${loading ? "animate-spin" : ""}`}
+                />
               </button>
             </div>
 
@@ -1187,9 +1283,18 @@ export default function ShiftsCalendar() {
                 ))}
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-bold text-gray-600">
-                <span className="rounded-md border-l-4 border-gray-300 bg-gray-50 px-2 py-1">Chưa bắt đầu</span>
-                <span className="rounded-md border-l-4 border-green-500 bg-green-50 px-2 py-1 text-green-700">Đã chấm công</span>
-                <span className="rounded-md border-l-4 border-orange-500 bg-orange-50 px-2 py-1 text-orange-700">Chưa chấm công</span>
+                <span className="rounded-md border-l-4 border-gray-300 bg-gray-50 px-2 py-1">
+                  Chưa bắt đầu
+                </span>
+                <span className="rounded-md border-l-4 border-green-500 bg-green-50 px-2 py-1 text-green-700">
+                  Đã chấm công
+                </span>
+                <span className="rounded-md border-l-4 border-orange-500 bg-orange-50 px-2 py-1 text-orange-700">
+                  Chưa chấm công
+                </span>
+                <span className="rounded-md border border-orange-500 bg-orange-50 px-2 py-1 text-orange-800">
+                  Đăng ký bổ sung
+                </span>
               </div>
             </div>
           </div>
@@ -1199,15 +1304,17 @@ export default function ShiftsCalendar() {
               {(notesByDate.get(dateKey(cursorDate)) || []).map((note) => (
                 <NoteTag key={note.note_id} note={note} />
               ))}
-              {(supplementalByDate.get(dateKey(cursorDate)) || []).map((request) => (
-                <SupplementalTag
-                  key={request.request_id}
-                  request={request}
-                  role={role}
-                  onAccept={acceptSupplementalRequest}
-                  onDelete={deleteSupplementalRequest}
-                />
-              ))}
+              {(supplementalByDate.get(dateKey(cursorDate)) || []).map(
+                (request) => (
+                  <SupplementalTag
+                    key={request.request_id}
+                    request={request}
+                    role={role}
+                    onAccept={acceptSupplementalRequest}
+                    onDelete={deleteSupplementalRequest}
+                  />
+                ),
+              )}
               {visibleSchedules.length === 0 &&
               !(notesByDate.get(dateKey(cursorDate)) || []).length &&
               !(supplementalByDate.get(dateKey(cursorDate)) || []).length ? (
@@ -1221,7 +1328,9 @@ export default function ShiftsCalendar() {
                     currentEmployeeId &&
                     Number(schedule.employee_id) !== Number(currentEmployeeId);
                   const adjustment =
-                    adjustmentsByEmployeeDate.get(`${schedule.employee_id}-${schedule.work_date}`) || 0;
+                    adjustmentsByEmployeeDate.get(
+                      `${schedule.employee_id}-${schedule.work_date}`,
+                    ) || 0;
 
                   return (
                     <div
@@ -1234,20 +1343,27 @@ export default function ShiftsCalendar() {
                             <UserIcon className="h-5 w-5" />
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-base font-bold text-gray-950">{schedule.employee_name}</div>
-                            <div className="mt-1 text-sm font-medium text-gray-500">{schedule.shift_name}</div>
+                            <div className="truncate text-base font-bold text-gray-950">
+                              {schedule.employee_name}
+                            </div>
+                            <div className="mt-1 text-sm font-medium text-gray-500">
+                              {schedule.shift_name}
+                            </div>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 text-sm font-bold">
                           <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-3 py-2 text-gray-700">
                             <ClockIcon className="h-4 w-4" />
-                            {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
+                            {formatTime(schedule.start_time)} -{" "}
+                            {formatTime(schedule.end_time)}
                           </span>
                           <span className="rounded-md bg-gray-100 px-3 py-2 text-gray-700">
                             {borderLabel(schedule, attendanceByScheduleId)}
                           </span>
                           {adjustment !== 0 && (
-                            <span className={`rounded-md px-3 py-2 ${adjustment > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                            <span
+                              className={`rounded-md px-3 py-2 ${adjustment > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                            >
                               {formatMoneyCompact(adjustment)}
                             </span>
                           )}
@@ -1277,7 +1393,9 @@ export default function ShiftsCalendar() {
                   </div>
                 ))}
               </div>
-              <div className={`grid grid-cols-1 gap-2 overflow-visible sm:grid-cols-7 ${viewMode === "week" ? "sm:auto-rows-fr" : ""}`}>
+              <div
+                className={`grid grid-cols-1 gap-2 overflow-visible sm:grid-cols-7 ${viewMode === "week" ? "sm:auto-rows-fr" : ""}`}
+              >
                 {visibleDates.map(renderDayCell)}
               </div>
             </>
@@ -1287,11 +1405,18 @@ export default function ShiftsCalendar() {
 
       {supplementalModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/30 p-3 backdrop-blur-sm sm:items-center">
-          <form onSubmit={submitSupplementalRequest} className="w-full max-w-md rounded-md bg-white p-4 shadow-2xl">
+          <form
+            onSubmit={submitSupplementalRequest}
+            className="w-full max-w-md rounded-md bg-white p-4 shadow-2xl"
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-gray-950">Yêu cầu đăng ký bổ sung</h2>
-                <p className="mt-1 text-sm text-gray-600">Tag sẽ hiển thị tại ngày và ca đã chọn.</p>
+                <h2 className="text-lg font-bold text-gray-950">
+                  Yêu cầu đăng ký bổ sung
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Tag sẽ hiển thị tại ngày và ca đã chọn.
+                </p>
               </div>
               <button
                 type="button"
@@ -1335,7 +1460,8 @@ export default function ShiftsCalendar() {
                 <option value="">Chọn ca</option>
                 {availableShifts.map((shift) => (
                   <option key={shift.shift_id} value={shift.shift_id}>
-                    {shift.shift_name} ({formatTime(shift.start_time)} - {formatTime(shift.end_time)})
+                    {shift.shift_name} ({formatTime(shift.start_time)} -{" "}
+                    {formatTime(shift.end_time)})
                   </option>
                 ))}
               </select>
@@ -1368,7 +1494,9 @@ export default function ShiftsCalendar() {
               </button>
               <button
                 type="submit"
-                disabled={!supplementalForm.work_date || !supplementalForm.shift_id}
+                disabled={
+                  !supplementalForm.work_date || !supplementalForm.shift_id
+                }
                 className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-50"
               >
                 <PlusCircleIcon className="h-4 w-4" />
@@ -1381,11 +1509,18 @@ export default function ShiftsCalendar() {
 
       {noteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/30 p-3 backdrop-blur-sm sm:items-center">
-          <form onSubmit={submitScheduleNote} className="w-full max-w-lg rounded-md bg-white p-4 shadow-2xl">
+          <form
+            onSubmit={submitScheduleNote}
+            className="w-full max-w-lg rounded-md bg-white p-4 shadow-2xl"
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-gray-950">Gửi thông báo lịch</h2>
-                <p className="mt-1 text-sm text-gray-600">Tag sẽ hiển thị trên các ngày đã chọn trong lịch chung.</p>
+                <h2 className="text-lg font-bold text-gray-950">
+                  Gửi thông báo lịch
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Tag sẽ hiển thị trên các ngày đã chọn trong lịch chung.
+                </p>
               </div>
               <button
                 type="button"
@@ -1401,7 +1536,12 @@ export default function ShiftsCalendar() {
               Nội dung
               <input
                 value={noteForm.title}
-                onChange={(event) => setNoteForm((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) =>
+                  setNoteForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
                 className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-blue-600"
                 required
               />
@@ -1414,10 +1554,19 @@ export default function ShiftsCalendar() {
                   <input
                     type="date"
                     value={noteForm.draftDate}
-                    onChange={(event) => setNoteForm((current) => ({ ...current, draftDate: event.target.value }))}
+                    onChange={(event) =>
+                      setNoteForm((current) => ({
+                        ...current,
+                        draftDate: event.target.value,
+                      }))
+                    }
                     className="h-10 min-w-0 flex-1 rounded-md border border-gray-300 px-3 text-sm outline-none transition focus:border-blue-600"
                   />
-                  <button type="button" onClick={addNoteDate} className="rounded-md bg-gray-950 px-3 text-sm font-bold text-white">
+                  <button
+                    type="button"
+                    onClick={addNoteDate}
+                    className="rounded-md bg-gray-950 px-3 text-sm font-bold text-white"
+                  >
                     Thêm
                   </button>
                 </div>
@@ -1427,7 +1576,12 @@ export default function ShiftsCalendar() {
                   <button
                     key={date}
                     type="button"
-                    onClick={() => setNoteForm((current) => ({ ...current, dates: current.dates.filter((item) => item !== date) }))}
+                    onClick={() =>
+                      setNoteForm((current) => ({
+                        ...current,
+                        dates: current.dates.filter((item) => item !== date),
+                      }))
+                    }
                     className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700"
                   >
                     {date} ×
@@ -1443,7 +1597,9 @@ export default function ShiftsCalendar() {
                   <button
                     key={color}
                     type="button"
-                    onClick={() => setNoteForm((current) => ({ ...current, color }))}
+                    onClick={() =>
+                      setNoteForm((current) => ({ ...current, color }))
+                    }
                     className={`h-8 rounded-md border ${noteForm.color === color ? "border-gray-950 ring-2 ring-gray-950/20" : "border-gray-200"}`}
                     style={{ backgroundColor: color }}
                     aria-label={`Chọn màu ${color}`}
@@ -1462,7 +1618,10 @@ export default function ShiftsCalendar() {
               </button>
               <button
                 type="submit"
-                disabled={!noteForm.title.trim() || !noteForm.dates.length && !noteForm.draftDate}
+                disabled={
+                  !noteForm.title.trim() ||
+                  (!noteForm.dates.length && !noteForm.draftDate)
+                }
                 className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <PaperAirplaneIcon className="h-4 w-4" />
@@ -1478,9 +1637,13 @@ export default function ShiftsCalendar() {
           <div className="w-full max-w-md rounded-md bg-white p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-gray-950">Đổi ca với nhân viên này?</h2>
+                <h2 className="text-lg font-bold text-gray-950">
+                  Đổi ca với nhân viên này?
+                </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  {swapCandidate.employee_name} · {swapCandidate.shift_name} · {formatTime(swapCandidate.start_time)} - {formatTime(swapCandidate.end_time)}
+                  {swapCandidate.employee_name} · {swapCandidate.shift_name} ·{" "}
+                  {formatTime(swapCandidate.start_time)} -{" "}
+                  {formatTime(swapCandidate.end_time)}
                 </p>
               </div>
               <button
