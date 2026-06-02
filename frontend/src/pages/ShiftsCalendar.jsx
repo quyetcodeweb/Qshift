@@ -102,10 +102,6 @@ function startOfWeek(date) {
   return next;
 }
 
-function endOfMonth(date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
-
 function formatDate(date) {
   return date.toLocaleDateString("vi-VN", {
     day: "2-digit",
@@ -227,6 +223,27 @@ function monthCells(date) {
 function weekCells(date) {
   const start = startOfWeek(date);
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function visibleDateRange(date, viewMode) {
+  if (viewMode === "day") {
+    const key = dateKey(date);
+    return { startDate: key, endDate: key };
+  }
+
+  if (viewMode === "week") {
+    const days = weekCells(date);
+    return {
+      startDate: dateKey(days[0]),
+      endDate: dateKey(days[days.length - 1]),
+    };
+  }
+
+  const days = monthCells(date);
+  return {
+    startDate: dateKey(days[0]),
+    endDate: dateKey(days[days.length - 1]),
+  };
 }
 
 function periodTitle(viewMode, cursorDate) {
@@ -755,28 +772,12 @@ export default function ShiftsCalendar() {
   const todayKey = dateKey(new Date());
 
   const range = useMemo(() => {
-    if (viewMode === "day") {
-      const key = dateKey(cursorDate);
-      return { startDate: key, endDate: key };
-    }
-
-    if (viewMode === "week") {
-      const start = startOfWeek(cursorDate);
-      return { startDate: dateKey(start), endDate: dateKey(addDays(start, 6)) };
-    }
-
-    const start = new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1);
-    return {
-      startDate: dateKey(start),
-      endDate: dateKey(endOfMonth(cursorDate)),
-    };
+    return visibleDateRange(cursorDate, viewMode);
   }, [cursorDate, viewMode]);
 
   const fetchSchedules = useCallback(async () => {
     try {
       setLoading(true);
-      const month = cursorDate.getMonth() + 1;
-      const year = cursorDate.getFullYear();
       const [
         scheduleRes,
         attendanceRes,
@@ -784,12 +785,10 @@ export default function ShiftsCalendar() {
         supplementalRes,
         adjustmentsRes,
       ] = await Promise.allSettled([
-        axios.get(
-          `${API_URL}/schedules/current?month=${month}&year=${year}&scope=all`,
-          {
-            headers: authHeaders(),
-          },
-        ),
+        axios.get(`${API_URL}/schedules/current`, {
+          params: { ...range, scope: "all" },
+          headers: authHeaders(),
+        }),
         axios.get(`${API_URL}/attendance/history`, {
           params: range,
           headers: authHeaders(),
@@ -1113,7 +1112,7 @@ export default function ShiftsCalendar() {
         <div className="mb-2 flex items-center justify-between">
           <span
             className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold ${
-              isToday ? "bg-gray-950 text-white" : "text-gray-700"
+              isToday ? "bg-green-300 text-white" : "text-gray-700"
             }`}
           >
             {date.getDate()}
@@ -1258,10 +1257,12 @@ export default function ShiftsCalendar() {
               <button
                 type="button"
                 onClick={() => setCursorDate(new Date())}
-                className="flex h-10 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                className="flex h-10 w-10 items-center justify-center gap-2 rounded-md border border-gray-300 px-0 text-sm font-bold text-gray-700 transition hover:bg-gray-50 sm:w-auto sm:px-3"
+                aria-label="Hôm nay"
+                title="Hôm nay"
               >
                 <CalendarDaysIcon className="h-5 w-5" />
-                Hôm nay
+                <span className="hidden sm:inline">Hôm nay</span>
               </button>
               <button
                 type="button"

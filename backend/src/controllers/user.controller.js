@@ -22,6 +22,15 @@ export const changeOwnPassword = async (req, res) => {
   }
 };
 
+export const sendPasswordOtp = async (req, res) => {
+  try {
+    const result = await userService.sendPasswordOtp(req.user.user_id);
+    res.json(result);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
+};
+
 export const deleteUser = async (req, res) => {
   try {
     await userService.deleteUser(req.params.id);

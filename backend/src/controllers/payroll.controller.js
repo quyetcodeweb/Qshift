@@ -1,4 +1,16 @@
 import database from "../config/db.js";
+import { sendUserEmail } from "../services/emailNotification.service.js";
+
+async function sendPayrollEmail(userId, message) {
+  try {
+    await sendUserEmail(userId, "payroll", {
+      subject: "Thông báo lương Qshift",
+      text: message,
+    });
+  } catch (error) {
+    console.warn("[email] payroll notification skipped:", error.message);
+  }
+}
 
 function normalizeDateRange({ startDate, endDate }) {
   return {
@@ -571,6 +583,10 @@ export async function createPayrollAdjustment(req, res) {
           result.insertId,
         ]
       );
+      await sendPayrollEmail(
+        employee.user_id,
+        `Ban co cap nhat luong ngay ${workDate}: ${label} ${Math.round(amount).toLocaleString("vi-VN")} VND${note ? ` - ${note}` : ""}`
+      );
     }
 
     res.json({ message: "Đã lưu thưởng/phạt", adjustment_id: result.insertId });
@@ -707,6 +723,7 @@ export async function submitPayrollFeedback(req, res) {
           result.insertId,
         ]
       );
+      await sendPayrollEmail(admin.user_id, `${employeeName} phan hoi ve luong: ${subject}`);
     }
 
     res.json({ message: "Da gui phan hoi", feedback_id: result.insertId });
@@ -802,6 +819,12 @@ export async function respondPayrollFeedback(req, res) {
           : `Admin da tra loi phan hoi luong "${feedback.subject}": ${adminReply}`,
         feedbackId,
       ]
+    );
+    await sendPayrollEmail(
+      feedback.user_id,
+      action === "reject"
+        ? `Phan hoi luong "${feedback.subject}" da bi tu choi: ${adminReply}`
+        : `Admin da tra loi phan hoi luong "${feedback.subject}": ${adminReply}`
     );
 
     res.json({ message: action === "reject" ? "Da tu choi phan hoi" : "Da tra loi phan hoi" });

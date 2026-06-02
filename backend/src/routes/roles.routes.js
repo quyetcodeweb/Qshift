@@ -4,6 +4,7 @@ import {
   getRoles,
   createRole,
   getEmployeeRoles,
+  getEmployeeRoleAssignments,
   assignRoleToEmployee,
   removeRoleFromEmployee,
   getShiftRoleRequirements,
@@ -14,6 +15,7 @@ const router = express.Router();
 
 // Public routes
 router.get("/", verifyToken, getRoles);
+router.get("/employee-assignments", verifyToken, getEmployeeRoleAssignments);
 router.get("/employee/:employee_id", verifyToken, getEmployeeRoles);
 router.get("/shift/:shift_id", verifyToken, getShiftRoleRequirements);
 

@@ -1,4 +1,9 @@
 import * as employeeService from "../services/employee.service.js";
+import {
+  createAndSendOtp,
+  getEmailPreferences,
+  saveEmailPreferences,
+} from "../services/emailNotification.service.js";
 
 export const createEmployee = async (req, res) => {
   try {
@@ -29,6 +34,46 @@ export const getMyProfile = async (req, res) => {
     res.json(employee);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+export const getMyEmailPreferences = async (req, res) => {
+  try {
+    const employee = await employeeService.getMyProfile(req.user?.user_id);
+    if (!employee) return res.status(404).json({ message: "Không tìm thấy hồ sơ nhân viên" });
+    res.json(await getEmailPreferences(employee.employee_id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const updateMyEmailPreferences = async (req, res) => {
+  try {
+    const employee = await employeeService.getMyProfile(req.user?.user_id);
+    if (!employee) return res.status(404).json({ message: "Không tìm thấy hồ sơ nhân viên" });
+    res.json(await saveEmailPreferences(employee.employee_id, req.body || {}));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const sendEmailOtp = async (req, res) => {
+  try {
+    const employee = await employeeService.getMyProfile(req.user?.user_id);
+    if (!employee) return res.status(404).json({ message: "Không tìm thấy hồ sơ nhân viên" });
+    const purpose = req.body?.purpose === "password_change" ? "password_change" : "email_change";
+    const targetEmail = purpose === "email_change"
+      ? employee.email
+      : employee.email;
+    const result = await createAndSendOtp({
+      userId: req.user.user_id,
+      employeeId: employee.employee_id,
+      purpose,
+      targetEmail,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 };
 
@@ -76,6 +121,12 @@ export const updateEmployee = async (req, res) => {
 
     if (user?.role !== "ADMIN") {
       payload.hourly_rate = targetEmployee.hourly_rate;
+
+      const oldEmail = String(targetEmployee.email || "").trim();
+      const nextEmail = String(payload.email || "").trim();
+      if (oldEmail && nextEmail && oldEmail !== nextEmail) {
+        await employeeService.verifyEmployeeEmailChangeOtp(user.user_id, req.body?.emailOtp);
+      }
     }
 
     const updated = await employeeService.updateEmployee(employeeId, payload);

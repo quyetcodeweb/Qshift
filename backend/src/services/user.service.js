@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import * as userModel from "../models/user.model.js";
+import { createAndSendOtp, verifyOtp } from "./emailNotification.service.js";
 
 export const getUsers = async () => {
   return await userModel.getUsers();
@@ -80,6 +81,18 @@ export const changeOwnPassword = async (userId, data) => {
     throw error;
   }
 
+  if (!data.otp) {
+    const error = new Error("Vui lòng nhập mã OTP đã gửi tới email");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await verifyOtp({
+    userId,
+    purpose: "password_change",
+    code: data.otp,
+  });
+
   const password = await bcrypt.hash(data.newPassword, 10);
 
   return await userModel.updateUser(userId, {
@@ -87,6 +100,29 @@ export const changeOwnPassword = async (userId, data) => {
     password,
     role: existingUser.role,
     status: existingUser.status,
+  });
+};
+
+export const sendPasswordOtp = async (userId) => {
+  const existingUser = await userModel.getUserById(userId);
+  if (!existingUser) {
+    const error = new Error("Không tìm thấy tài khoản");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const employee = await userModel.getEmployeeByUserId(userId);
+  if (!employee?.email) {
+    const error = new Error("Tài khoản chưa có email để nhận mã OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return createAndSendOtp({
+    userId,
+    employeeId: employee.employee_id,
+    purpose: "password_change",
+    targetEmail: employee.email,
   });
 };
 

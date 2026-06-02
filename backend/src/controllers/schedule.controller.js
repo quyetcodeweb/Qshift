@@ -6,6 +6,7 @@ import {
   getDraftSchedules,
   deleteDraftSchedule,
 } from "../services/schedule.service.js";
+import { sendUserEmail } from "../services/emailNotification.service.js";
 
 async function ensureDraftTables() {
   await database.query(`
@@ -179,6 +180,23 @@ function badRequest(message) {
   return error;
 }
 
+function getEmailTypeForScheduleNotification(type) {
+  if (String(type || "").includes("SUPPLEMENTAL")) return "availability";
+  if (String(type || "").includes("NOTE")) return "admin_reminder";
+  return "schedule";
+}
+
+async function sendScheduleNotificationEmail(userId, type, message) {
+  try {
+    await sendUserEmail(userId, getEmailTypeForScheduleNotification(type), {
+      subject: "Thông báo Qshift",
+      text: message,
+    });
+  } catch (error) {
+    console.warn("[email] schedule notification skipped:", error.message);
+  }
+}
+
 async function ensureSupplementalRequestIsFuture(request) {
   if (request.work_date < vietnamDateKey()) {
     throw badRequest("Không thể gửi yêu cầu bổ sung cho ngày đã qua");
@@ -263,6 +281,7 @@ async function notifyEmployees(message, type, refId = null) {
        VALUES (?, ?, ?, ?)`,
       [employee.user_id, message, type, refId]
     );
+    await sendScheduleNotificationEmail(employee.user_id, type, message);
   }
 }
 
@@ -275,6 +294,7 @@ async function notifyAdmins(message, type, refId = null) {
        VALUES (?, ?, ?, ?)`,
       [admin.user_id, message, type, refId]
     );
+    await sendScheduleNotificationEmail(admin.user_id, type, message);
   }
 }
 
@@ -473,6 +493,11 @@ export async function publishSchedule(req, res) {
           null,
         ]
       );
+      await sendScheduleNotificationEmail(
+        emp.user_id,
+        "SCHEDULE_PUBLISHED",
+        `Lịch làm việc cho tháng ${month}/${year} đã được công bố`
+      );
     }
 
     res.json({
@@ -489,10 +514,19 @@ export async function getCurrentSchedules(req, res) {
   try {
     const userId = req.user?.user_id;
 
-    let { month, year, scope } = req.query;
+    let { month, year, scope, startDate, endDate } = req.query;
+    startDate =
+      typeof startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(startDate)
+        ? startDate
+        : null;
+    endDate =
+      typeof endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endDate)
+        ? endDate
+        : null;
+    const hasDateRange = Boolean(startDate || endDate);
 
-    const allMonths = month === "all";
-    const allYears = year === "all";
+    const allMonths = month === "all" || hasDateRange;
+    const allYears = year === "all" || hasDateRange;
     month = allMonths ? null : parseInt(month);
     year = allYears ? null : parseInt(year);
 
@@ -502,7 +536,13 @@ export async function getCurrentSchedules(req, res) {
       year = year || now.getFullYear();
     }
 
-    console.log("[getCurrentSchedules] User:", userId, "Requesting:", { month, year, scope });
+    console.log("[getCurrentSchedules] User:", userId, "Requesting:", {
+      month,
+      year,
+      scope,
+      startDate,
+      endDate,
+    });
 
     const [userRole] = await database.query(
       "SELECT role FROM users WHERE user_id = ?",
@@ -512,6 +552,8 @@ export async function getCurrentSchedules(req, res) {
     const scheduleFilters = {
       month: allMonths ? null : month,
       year: allYears ? null : year,
+      startDate,
+      endDate,
     };
     let schedules;
 
@@ -628,6 +670,11 @@ export async function createScheduleNote(req, res) {
         `INSERT INTO notifications (user_id, message, type, ref_id)
          VALUES (?, ?, 'SCHEDULE_NOTE', NULL)`,
         [employee.user_id, `Thông báo lịch: ${title} (${dates.join(", ")})`]
+      );
+      await sendScheduleNotificationEmail(
+        employee.user_id,
+        "SCHEDULE_NOTE",
+        `Thông báo lịch: ${title} (${dates.join(", ")})`
       );
     }
 
@@ -871,7 +918,13 @@ export async function deleteSupplementalRequest(req, res) {
   }
 }
 
-async function getSchedulesByFilters({ employeeId, month, year }) {
+async function getSchedulesByFilters({
+  employeeId,
+  month,
+  year,
+  startDate,
+  endDate,
+}) {
   const conditions = [];
   const params = [];
 
@@ -888,6 +941,16 @@ async function getSchedulesByFilters({ employeeId, month, year }) {
   if (year) {
     conditions.push("YEAR(s.work_date) = ?");
     params.push(year);
+  }
+
+  if (startDate) {
+    conditions.push("s.work_date >= ?");
+    params.push(startDate);
+  }
+
+  if (endDate) {
+    conditions.push("s.work_date <= ?");
+    params.push(endDate);
   }
 
   const whereClause = conditions.length

@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import db from "../config/db.js";
 import * as employeeModel from "../models/employee.model.js";
 import * as userService from "./user.service.js";
+import { verifyOtp } from "./emailNotification.service.js";
 export const createEmployee = async (data) => {
   const {
     name,
@@ -93,6 +94,19 @@ export const updateEmployee = async (employeeId, data) => {
   return await employeeModel.updateEmployee(employeeId, {
     ...existing,
     ...data,
+  });
+};
+
+export const verifyEmployeeEmailChangeOtp = async (userId, otpCode) => {
+  if (!otpCode) {
+    const error = new Error("Vui lòng nhập mã OTP đã gửi tới email cũ");
+    error.statusCode = 400;
+    throw error;
+  }
+  return verifyOtp({
+    userId,
+    purpose: "email_change",
+    code: otpCode,
   });
 };
 

@@ -58,17 +58,28 @@ export const getEmployees = async () => {
       e.name,
       e.email,
       e.phone,
+      e.avatar_url,
       CAST(e.hourly_rate AS CHAR) AS hourly_rate,
       DATE_FORMAT(e.birth_date, '%Y-%m-%d') AS birth_date,
       DATE_FORMAT(e.hire_date, '%Y-%m-%d') AS hire_date,
-      e.status,
-      FALSE AS has_avatar,
+      e.avatar_url IS NOT NULL AND e.avatar_url <> '' AS has_avatar,
       u.username
     FROM employees e
     JOIN users u ON e.user_id = u.user_id
     ORDER BY e.name ASC
   `);
-  return rows;
+  const [statuses] = await db.query(`
+    SELECT employee_id, status
+    FROM employees
+  `);
+  const statusByEmployee = new Map(
+    statuses.map((item) => [Number(item.employee_id), item.status]),
+  );
+
+  return rows.map((employee) => ({
+    ...employee,
+    status: statusByEmployee.get(Number(employee.employee_id)) || null,
+  }));
 };
 
 export const getEmployeeByUserId = async (userId) => {
@@ -93,6 +104,7 @@ export const getEmployeeById = async (employeeId) => {
         e.name,
         e.email,
         e.phone,
+        e.avatar_url,
         e.address,
         e.birth_date,
         e.gender,
@@ -101,7 +113,7 @@ export const getEmployeeById = async (employeeId) => {
         e.hourly_rate,
         e.hire_date,
         e.status,
-        FALSE AS has_avatar,
+        e.avatar_url IS NOT NULL AND e.avatar_url <> '' AS has_avatar,
         u.username
       FROM employees e
       JOIN users u ON e.user_id = u.user_id

@@ -12,6 +12,7 @@ import rolesRoutes from "./routes/roles.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import payrollRoutes from "./routes/payroll.routes.js";
 import shiftSwapRoutes from "./routes/shiftSwap.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 import pool from "./config/db.js";
 import { runMigrations } from "./utils/migrate.js";
 import { scanMissingAttendanceNotifications } from "./controllers/attendance.controller.js";
@@ -94,6 +95,7 @@ app.use("/api/roles", rolesRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/shift-swaps", shiftSwapRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Run migrations on startup
 await runMigrations();

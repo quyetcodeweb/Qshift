@@ -31,6 +31,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
 import { getRole, getUser, logout } from "../utils/auth";
+import defaultEmployeeAvatar from "../assets/default-employee-avatar.svg";
 
 function roleLabel(role) {
   return role === "ADMIN" ? "Admin" : "Nhân viên";
@@ -60,22 +61,17 @@ function readAvailabilityAccess() {
 function UserAvatar({ user, profile }) {
   const name = profile?.name || user?.employee_name || user?.username || "Q";
   const avatarUrl = profile?.avatar_url || user?.avatar_url;
-  const initial = String(name).trim().charAt(0).toUpperCase() || "Q";
-
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        className="h-11 w-11 rounded-full border border-gray-200 object-cover"
-      />
-    );
-  }
 
   return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-      {initial}
-    </div>
+    <img
+      src={avatarUrl || defaultEmployeeAvatar}
+      alt={name}
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        event.currentTarget.src = defaultEmployeeAvatar;
+      }}
+      className="h-11 w-11 rounded-full border border-gray-200 object-cover"
+    />
   );
 }
 

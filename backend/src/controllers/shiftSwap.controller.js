@@ -1,4 +1,5 @@
 import database from "../config/db.js";
+import { sendUserEmail } from "../services/emailNotification.service.js";
 
 const ACTIVE_STATUS = "PENDING_TARGET";
 const APPROVED_STATUS = "APPROVED";
@@ -69,6 +70,14 @@ async function notifyUser(userId, type, message, refId, connection = database) {
      VALUES (?, ?, ?, ?)`,
     [userId, message, type, refId],
   );
+  try {
+    await sendUserEmail(userId, "shift_swap", {
+      subject: "Thông báo đổi ca Qshift",
+      text: message,
+    });
+  } catch (error) {
+    console.warn("[email] shift swap notification skipped:", error.message);
+  }
 }
 
 async function notifyAdmins(type, message, refId, connection = database) {

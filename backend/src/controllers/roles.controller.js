@@ -60,6 +60,27 @@ export async function getEmployeeRoles(req, res) {
   }
 }
 
+export async function getEmployeeRoleAssignments(req, res) {
+  try {
+    const [roles] = await database.query(
+      `SELECT
+         era.employee_id,
+         r.role_id,
+         r.role_name,
+         r.description,
+         r.color
+       FROM employee_role_assignments era
+       INNER JOIN roles r ON r.role_id = era.role_id
+       ORDER BY era.employee_id ASC, r.role_name ASC`
+    );
+
+    res.json(roles);
+  } catch (error) {
+    console.error("[getEmployeeRoleAssignments] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
 export async function assignRoleToEmployee(req, res) {
   try {
     const { employee_id } = req.params;

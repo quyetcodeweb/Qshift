@@ -18,6 +18,14 @@ export const getUserById = async (id) => {
   return rows[0] || null;
 };
 
+export const getEmployeeByUserId = async (userId) => {
+  const [rows] = await db.query(
+    "SELECT employee_id, email, name FROM employees WHERE user_id=? LIMIT 1",
+    [userId],
+  );
+  return rows[0] || null;
+};
+
 export const countAdmins = async () => {
   const [rows] = await db.query(
     "SELECT COUNT(*) as total FROM users WHERE role='ADMIN'"

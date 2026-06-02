@@ -1,4 +1,5 @@
 import database from "../config/db.js";
+import { sendUserEmail } from "../services/emailNotification.service.js";
 
 const LOCAL_NOW_SQL = "(UTC_TIMESTAMP() + INTERVAL 7 HOUR)";
 const TODAY_SQL = `DATE(${LOCAL_NOW_SQL})`;
@@ -404,6 +405,14 @@ async function notifyAdmins({ type, message, refId = null, dedupe = false }) {
        VALUES (?, ?, ?, ?)`,
       [admin.user_id, message, type, refId]
     );
+    try {
+      await sendUserEmail(admin.user_id, "attendance", {
+        subject: "Thông báo chấm công Qshift",
+        text: message,
+      });
+    } catch (error) {
+      console.warn("[email] attendance admin notification skipped:", error.message);
+    }
   }
 }
 
@@ -414,6 +423,14 @@ async function notifyUser(userId, type, message, refId = null) {
      VALUES (?, ?, ?, ?)`,
     [userId, message, type, refId]
   );
+  try {
+    await sendUserEmail(userId, "attendance", {
+      subject: "Thông báo chấm công Qshift",
+      text: message,
+    });
+  } catch (error) {
+    console.warn("[email] attendance notification skipped:", error.message);
+  }
 }
 
 async function notifyAttendanceCheckIn(schedule, attendanceStatus) {
@@ -479,63 +496,89 @@ export async function scanMissingAttendanceNotifications() {
   }
 }
 
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
 async function getAttendanceRecords(extraWhere = "", params = [], orderBy = "") {
-  const [schedules] = await database.query(
-    `SELECT
-      CAST(s.schedule_id AS CHAR) AS schedule_id,
-      CAST(s.employee_id AS CHAR) AS employee_id,
-      e.name AS employee_name,
-      e.email,
-      CAST(s.shift_id AS CHAR) AS shift_id
-     FROM schedules s
-     JOIN employees e ON s.employee_id = e.employee_id
-     JOIN shifts sh ON s.shift_id = sh.shift_id
-     WHERE s.status = 'PUBLISHED'
-       ${extraWhere}
-     ${orderBy}`,
-    params
-  );
+  const scheduleIdRows = [];
+  const pageSize = 80;
+  let offset = 0;
 
-  if (!schedules.length) return [];
+  while (true) {
+    const [pageRows] = await database.query(
+      `SELECT CAST(s.schedule_id AS CHAR) AS schedule_id
+       FROM schedules s
+       JOIN employees e ON s.employee_id = e.employee_id
+       JOIN shifts sh ON s.shift_id = sh.shift_id
+       WHERE s.status = 'PUBLISHED'
+         ${extraWhere}
+       ${orderBy}
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset]
+    );
 
-  const scheduleIds = schedules.map((schedule) => schedule.schedule_id);
-  const placeholders = scheduleIds.map(() => "?").join(",");
-  const [shiftRows] = await database.query(
-    `SELECT
-      CAST(s.schedule_id AS CHAR) AS schedule_id,
-      sh.shift_name,
-      TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
-      TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time,
-      DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
-      s.status AS schedule_status
-     FROM schedules s
-     JOIN shifts sh ON s.shift_id = sh.shift_id
-     WHERE s.schedule_id IN (${placeholders})`,
-    scheduleIds
-  );
-  const [attendanceRows] = await database.query(
-    `SELECT
-      CAST(schedule_id AS CHAR) AS schedule_id,
-      CAST(attendance_id AS CHAR) AS attendance_id,
-      DATE_FORMAT(check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
-      DATE_FORMAT(check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
-      status AS attendance_status
-     FROM attendance
-     WHERE schedule_id IN (${placeholders})`,
-    scheduleIds
-  );
+    scheduleIdRows.push(...pageRows);
+    if (pageRows.length < pageSize) break;
+    offset += pageSize;
+  }
 
-  const shiftByScheduleId = new Map(
-    shiftRows.map((row) => [row.schedule_id, row])
-  );
+  if (!scheduleIdRows.length) return [];
+
+  const scheduleIds = scheduleIdRows.map((schedule) => schedule.schedule_id);
+  const schedules = [];
+  const attendanceRows = [];
+
+  for (const scheduleIdChunk of chunkArray(scheduleIds, 40)) {
+    const placeholders = scheduleIdChunk.map(() => "?").join(",");
+    const [scheduleRows] = await database.query(
+      `SELECT
+        CAST(s.schedule_id AS CHAR) AS schedule_id,
+        CAST(s.employee_id AS CHAR) AS employee_id,
+        e.name AS employee_name,
+        e.email,
+        CAST(s.shift_id AS CHAR) AS shift_id,
+        sh.shift_name,
+        TIME_FORMAT(sh.start_time, '%H:%i:%s') AS start_time,
+        TIME_FORMAT(sh.end_time, '%H:%i:%s') AS end_time,
+        DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
+        s.status AS schedule_status
+       FROM schedules s
+       JOIN employees e ON s.employee_id = e.employee_id
+       JOIN shifts sh ON s.shift_id = sh.shift_id
+       WHERE s.schedule_id IN (${placeholders})`,
+      scheduleIdChunk
+    );
+    const [chunkAttendanceRows] = await database.query(
+      `SELECT
+        CAST(schedule_id AS CHAR) AS schedule_id,
+        CAST(attendance_id AS CHAR) AS attendance_id,
+        DATE_FORMAT(check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
+        DATE_FORMAT(check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
+        status AS attendance_status
+       FROM attendance
+       WHERE schedule_id IN (${placeholders})`,
+      scheduleIdChunk
+    );
+
+    schedules.push(...scheduleRows);
+    attendanceRows.push(...chunkAttendanceRows);
+  }
+
+  const scheduleById = new Map(schedules.map((row) => [row.schedule_id, row]));
   const attendanceByScheduleId = new Map(
     attendanceRows.map((row) => [row.schedule_id, row])
   );
 
-  return schedules.map((schedule) => {
-    const shift = shiftByScheduleId.get(schedule.schedule_id) || {};
+  return scheduleIds.map((scheduleId) => {
+    const schedule = scheduleById.get(scheduleId);
+    if (!schedule) return null;
     const attendance = attendanceByScheduleId.get(schedule.schedule_id) || {};
-    const scheduleRecord = { ...schedule, ...shift };
+    const scheduleRecord = { ...schedule };
     const progressStatus = getAttendanceProgressStatus(scheduleRecord, attendance);
     const record = {
       ...scheduleRecord,
@@ -550,7 +593,7 @@ async function getAttendanceRecords(extraWhere = "", params = [], orderBy = "") 
       ...record,
       attendance_bucket: getAttendanceBucket(record),
     };
-  });
+  }).filter(Boolean);
 }
 
 export async function getTodayAttendance(req, res) {

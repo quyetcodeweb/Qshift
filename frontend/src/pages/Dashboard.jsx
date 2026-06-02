@@ -57,6 +57,7 @@ const dashboardRequests = [
   { key: "employees", label: "nhân viên" },
   { key: "today", label: "chấm công hôm nay" },
   { key: "attendance", label: "lịch sử chấm công" },
+  { key: "roles", label: "vai trò nhân viên" },
 ];
 
 function authHeaders() {
@@ -104,8 +105,7 @@ function isWorkingAttendance(record) {
   if (record.attendance_bucket === "LATE") return true;
 
   return (
-    hasAttendanceTime(record.check_in) &&
-    record.progress_status !== "COMPLETED"
+    hasAttendanceTime(record.check_in) && record.progress_status !== "COMPLETED"
   );
 }
 
@@ -590,6 +590,57 @@ function DonutChart({ data }) {
   );
 }
 
+function DashboardErrorPopup({ message, onClose, onRetry }) {
+  if (!message) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/35 p-4 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="flex items-start gap-4 p-5">
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50">
+            <div className="absolute h-12 w-12 rounded-full border border-indigo-100" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <Typography className="text-base font-bold text-slate-950">
+              Đang gặp sự cố kết nối!!
+            </Typography>
+            <Typography className="mt-1 text-sm font-medium leading-6 text-slate-600">
+              {message}
+            </Typography>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Đóng thông báo"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end">
+          <Button
+            variant="outlined"
+            size="sm"
+            onClick={onClose}
+            className="rounded-md border-slate-300 normal-case text-slate-700"
+          >
+            Đóng
+          </Button>
+          <Button
+            size="sm"
+            onClick={onRetry}
+            className="flex items-center justify-center gap-2 rounded-md bg-slate-950 normal-case shadow-none hover:shadow-none"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            Thử lại
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -599,7 +650,7 @@ export default function Dashboard() {
   const [selectedEmployee, setSelectedEmployee] = useState("all");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
-  const [dateMode, setDateMode] = useState("all");
+  const [dateMode, setDateMode] = useState("month");
   const [month, setMonth] = useState(currentMonth);
   const [customRange, setCustomRange] = useState({
     startDate: toDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
@@ -647,6 +698,7 @@ export default function Dashboard() {
           params: attendanceParams,
           headers,
         }),
+        axios.get(`${API_URL}/roles/employee-assignments`, { headers }),
       ]);
 
       const failedRequests = results
@@ -673,34 +725,17 @@ export default function Dashboard() {
         );
       }
 
-      const [statsRes, employeesRes, todayRes, attendanceRes] = results.map(
-        (result) => (result.status === "fulfilled" ? result.value : null),
-      );
+      const [statsRes, employeesRes, todayRes, attendanceRes, rolesRes] =
+        results.map((result) =>
+          result.status === "fulfilled" ? result.value : null,
+        );
 
       const employeeList = employeesRes?.data || [];
       setStats(statsRes?.data?.stats || []);
       setEmployees(employeeList);
       setTodayAttendance(todayRes?.data || []);
       setAttendanceRecords(attendanceRes?.data?.records || []);
-
-      const roleResults = await Promise.allSettled(
-        employeeList.map((employee) =>
-          axios.get(`${API_URL}/roles/employee/${employee.employee_id}`, {
-            headers,
-          }),
-        ),
-      );
-
-      setRoleAssignments(
-        roleResults.flatMap((result, index) =>
-          result.status === "fulfilled"
-            ? (result.value.data || []).map((role) => ({
-                ...role,
-                employee_id: employeeList[index].employee_id,
-              }))
-            : [],
-        ),
-      );
+      setRoleAssignments(rolesRes?.data || []);
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -1025,11 +1060,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-          {error}
-        </div>
-      )}
+      <DashboardErrorPopup
+        message={error}
+        onClose={() => setError("")}
+        onRetry={fetchDashboard}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {selectedCards.slice(0, 4).map((key) => {

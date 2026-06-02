@@ -28,6 +28,7 @@ import {
   Typography,
 } from "@material-tailwind/react";
 import AutoScheduleModal from "../components/AutoScheduleModal";
+import AiScheduleAnalysis from "../components/AiScheduleAnalysis";
 import { API_URL } from "../services/api";
 
 const schedulePageSize = 8;
@@ -762,6 +763,8 @@ export default function CreateSchedule() {
         </div>
       </div>
 
+      <AiScheduleAnalysis month={viewMonth} year={viewYear} />
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <Card className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-gray-100 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -957,7 +960,7 @@ export default function CreateSchedule() {
                   className="flex items-center gap-2 rounded-md border-red-300 bg-red-50 normal-case text-red-700"
                 >
                   <TrashIcon className="h-4 w-4" />
-                  Xóa tất cả đang lọc
+                  Xóa tất cả
                 </Button>
               </div>
             </div>
@@ -1012,7 +1015,9 @@ export default function CreateSchedule() {
                       <div className="flex items-center gap-2">
                         <span
                           className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: schedule.color || "#2563eb" }}
+                          style={{
+                            backgroundColor: schedule.color || "#2563eb",
+                          }}
                         />
                         <span className="truncate text-sm font-bold text-gray-950">
                           {schedule.shift_name}

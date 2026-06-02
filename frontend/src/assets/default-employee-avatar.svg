@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Default employee avatar">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="12" x2="138" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="0.52" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="42" y1="98" x2="122" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" rx="34" fill="url(#bg)"/>
+  <circle cx="122" cy="34" r="26" fill="#ffffff" opacity="0.12"/>
+  <circle cx="36" cy="126" r="34" fill="#ffffff" opacity="0.1"/>
+  <circle cx="80" cy="62" r="31" fill="#f8fafc"/>
+  <path d="M80 98c-32 0-56 21-56 48h112c0-27-24-48-56-48Z" fill="url(#shirt)"/>
+  <path d="M56 145c6-16 22-25 24-25s18 9 24 25" fill="#e2e8f0" opacity="0.9"/>
+  <path d="M57 65c7 9 20 13 43 6 2 6 4 10 7 14 5-7 7-16 5-25-3-18-18-31-36-31-19 0-35 15-36 34 4-1 9-2 17 2Z" fill="#1f2937"/>
+</svg>

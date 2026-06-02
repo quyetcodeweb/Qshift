@@ -32,6 +32,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
+import defaultEmployeeAvatar from "../assets/default-employee-avatar.svg";
 
 const defaultForm = {
   name: "",
@@ -121,22 +122,16 @@ function roleText(user) {
 
 function EmployeeAvatar({ employee, size = "md" }) {
   const dimension = size === "lg" ? "h-20 w-20 text-xl" : "h-11 w-11 text-sm";
-  if (employee?.avatar_url) {
-    return (
-      <img
-        src={employee.avatar_url}
-        alt={employee.name}
-        className={`${dimension} rounded-md object-cover ring-1 ring-gray-200`}
-      />
-    );
-  }
-
   return (
-    <div
-      className={`${dimension} flex shrink-0 items-center justify-center rounded-md bg-gray-950 font-bold text-white`}
-    >
-      {initials(employee?.name)}
-    </div>
+    <img
+      src={employee?.avatar_url || defaultEmployeeAvatar}
+      alt={employee?.name || "Nhan vien"}
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        event.currentTarget.src = defaultEmployeeAvatar;
+      }}
+      className={`${dimension} shrink-0 rounded-md object-cover ring-1 ring-gray-200`}
+    />
   );
 }
 

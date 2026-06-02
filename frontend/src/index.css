@@ -87,3 +87,130 @@ table {
   border-radius: 12px;
   padding: 16px;
 }
+
+@keyframes aiPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aiMessageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aiFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes aiRingPulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes aiShimmer {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes aiTyping {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes profileModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ai-panel-enter {
+  animation: aiPanelIn 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: bottom right;
+}
+
+.ai-message-enter {
+  animation: aiMessageIn 220ms ease-out both;
+}
+
+.ai-float {
+  animation: aiFloat 3.4s ease-in-out infinite;
+}
+
+.ai-ring-pulse::before {
+  animation: aiRingPulse 2.2s ease-out infinite;
+}
+
+.ai-shimmer::after {
+  animation: aiShimmer 2.4s ease-in-out infinite;
+}
+
+.ai-typing-dot {
+  animation: aiTyping 1.15s ease-in-out infinite;
+}
+
+.ai-busy-bubble::after {
+  display: inline-flex;
+  width: 1.25rem;
+  margin-left: 0.25rem;
+  content: "...";
+  letter-spacing: 0.12rem;
+  animation: aiTyping 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-panel-enter,
+  .ai-message-enter,
+  .ai-float,
+  .ai-ring-pulse::before,
+  .ai-shimmer::after,
+  .ai-typing-dot,
+  .ai-busy-bubble::after,
+  [class*="profileModalIn"] {
+    animation: none !important;
+  }
+}

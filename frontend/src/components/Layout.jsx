@@ -1,4 +1,5 @@
 import Sidebar from "./Sidebar";
+import AiManagerChat from "./AiManagerChat";
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
@@ -16,6 +17,7 @@ import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import axios from "axios";
 import { API_URL } from "../services/api";
 import { getRole, getUser, logout } from "../utils/auth";
+import defaultEmployeeAvatar from "../assets/default-employee-avatar.svg";
 
 function roleLabel(role) {
   return role === "ADMIN" ? "Admin" : "Nhân viên";
@@ -45,22 +47,17 @@ function readAvailabilityAccess() {
 function UserAvatar({ user, profile }) {
   const name = profile?.name || user?.employee_name || user?.username || "Q";
   const avatarUrl = profile?.avatar_url || user?.avatar_url;
-  const initial = String(name).trim().charAt(0).toUpperCase() || "Q";
-
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        className="h-8 w-8 rounded-full border border-gray-200 object-cover"
-      />
-    );
-  }
 
   return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-      {initial}
-    </div>
+    <img
+      src={avatarUrl || defaultEmployeeAvatar}
+      alt={name}
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        event.currentTarget.src = defaultEmployeeAvatar;
+      }}
+      className="h-8 w-8 rounded-full border border-gray-200 object-cover"
+    />
   );
 }
 
@@ -197,6 +194,7 @@ export default function Layout() {
       <main className="min-w-0 flex-1 overflow-x-hidden bg-slate-50 px-3 pb-24 pt-3 sm:px-4 md:overflow-auto md:p-6">
         <Outlet />
       </main>
+      <AiManagerChat />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   TrashIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
+import AiRequestInsight from "../components/AiRequestInsight";
 import { API_URL } from "../services/api";
 
 const statusMeta = {
@@ -1108,6 +1109,9 @@ export default function ShiftSwapManagementPage() {
                                   )}
                                 </div>
                               )}
+                            {(isAvailability || isSwap) && (
+                              <AiRequestInsight request={request} />
+                            )}
                           </div>
 
                           {isAvailability && canRespondAvailabilityEdit && (
