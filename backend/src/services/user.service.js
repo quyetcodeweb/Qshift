@@ -2,6 +2,11 @@ import bcrypt from "bcrypt";
 import * as userModel from "../models/user.model.js";
 import { createAndSendOtp, verifyOtp } from "./emailNotification.service.js";
 
+function normalizeEmail(value) {
+  const email = String(value || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
 export const getUsers = async () => {
   return await userModel.getUsers();
 };
@@ -112,7 +117,12 @@ export const sendPasswordOtp = async (userId) => {
   }
 
   const employee = await userModel.getEmployeeByUserId(userId);
-  if (!employee?.email) {
+  const targetEmail =
+    normalizeEmail(employee?.email) ||
+    normalizeEmail(existingUser.email) ||
+    normalizeEmail(existingUser.username);
+
+  if (!targetEmail) {
     const error = new Error("Tài khoản chưa có email để nhận mã OTP");
     error.statusCode = 400;
     throw error;
@@ -120,9 +130,9 @@ export const sendPasswordOtp = async (userId) => {
 
   return createAndSendOtp({
     userId,
-    employeeId: employee.employee_id,
+    employeeId: employee?.employee_id,
     purpose: "password_change",
-    targetEmail: employee.email,
+    targetEmail,
   });
 };
 
