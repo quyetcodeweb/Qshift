@@ -85,6 +85,8 @@ function normalizeText(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
     .toLowerCase();
 }
 
@@ -129,11 +131,13 @@ function isMissingAttendance(record) {
   return !record.check_in && !isUpcomingAttendance(record);
 }
 
-function formatDate(value) {
+function formatBirthday(value) {
   if (!value) return "-";
-  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString(
-    "vi-VN",
-  );
+  const birthdayParts = parseBirthdayParts(value);
+  if (!birthdayParts) return "-";
+  return `${String(birthdayParts.day).padStart(2, "0")}/${String(
+    birthdayParts.month,
+  ).padStart(2, "0")}`;
 }
 
 function getEmployeeBirthday(employee) {
@@ -145,42 +149,80 @@ function getEmployeeBirthday(employee) {
   );
 }
 
+function parseBirthdayParts(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return {
+      month: value.getMonth() + 1,
+      day: value.getDate(),
+      normalized: toDateInput(value),
+    };
+  }
+
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return {
+        month,
+        day,
+        normalized: `${match[1]}-${String(month).padStart(2, "0")}-${String(
+          day,
+        ).padStart(2, "0")}`,
+      };
+    }
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return {
+    month: parsed.getMonth() + 1,
+    day: parsed.getDate(),
+    normalized: toDateInput(parsed),
+  };
+}
+
 function getUpcomingBirthdays(employees) {
+  const now = new Date();
   const start = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
   );
   return employees
+    .filter(isActiveEmployee)
     .map((employee) => {
       const birthday = getEmployeeBirthday(employee);
-      if (!birthday) return null;
-
-      const [birthYear, birthMonth, birthDay] = String(birthday)
-        .slice(0, 10)
-        .split("-")
-        .map(Number);
-      if (!birthYear || !birthMonth || !birthDay) return null;
+      const birthdayParts = parseBirthdayParts(birthday);
+      if (!birthdayParts) return null;
 
       let nextBirthday = new Date(
         start.getFullYear(),
-        birthMonth - 1,
-        birthDay,
+        birthdayParts.month - 1,
+        birthdayParts.day,
       );
       if (nextBirthday < start) {
         nextBirthday = new Date(
           start.getFullYear() + 1,
-          birthMonth - 1,
-          birthDay,
+          birthdayParts.month - 1,
+          birthdayParts.day,
         );
       }
 
       const daysLeft = Math.ceil((nextBirthday - start) / 86400000);
-      return { ...employee, birthday, nextBirthday, daysLeft };
+      return {
+        ...employee,
+        birthday: birthdayParts.normalized,
+        nextBirthday,
+        daysLeft,
+      };
     })
     .filter(Boolean)
-    .sort((a, b) => a.daysLeft - b.daysLeft)
-    .slice(0, 5);
+    .filter((employee) => employee.daysLeft <= 30)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
 function getEmployeeName(record, employeesById) {
@@ -1356,7 +1398,7 @@ export default function Dashboard() {
                       {employee.name}
                     </div>
                     <div className="mt-1 text-xs font-medium text-gray-500">
-                      {formatDate(employee.birthday)}
+                      {formatBirthday(employee.birthday)}
                     </div>
                   </div>
                   <span className="rounded-md bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
