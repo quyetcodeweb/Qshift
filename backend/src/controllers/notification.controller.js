@@ -22,6 +22,19 @@ async function ensureLateRequestTable() {
   );
 }
 
+let lateRequestTablePromise = null;
+
+function ensureLateRequestTableOnce() {
+  if (!lateRequestTablePromise) {
+    lateRequestTablePromise = ensureLateRequestTable().catch((error) => {
+      lateRequestTablePromise = null;
+      throw error;
+    });
+  }
+
+  return lateRequestTablePromise;
+}
+
 export const sendAvailabilityRequest = async (req, res) => {
   try {
     const { month, year, employee_id } = req.body;
@@ -50,7 +63,30 @@ export const getNotifications = async (req, res) => {
     return res.status(400).json({ message: "Missing user_id" });
   }
 
-  await ensureLateRequestTable();
+  if (String(req.query.summary || "") === "1") {
+    const [summaryRows] = await db.query(
+      `SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count
+       FROM notifications
+       WHERE user_id=?`,
+      [user_id]
+    );
+
+    return res.json({
+      total: Number(summaryRows[0]?.total || 0),
+      unread_count: Number(summaryRows[0]?.unread_count || 0),
+    });
+  }
+
+  await ensureLateRequestTableOnce();
+
+  const requestedLimit = Number(req.query.limit);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 500)
+    : null;
+  const limitClause = limit ? " LIMIT ?" : "";
+  const params = limit ? [user_id, limit] : [user_id];
 
   const [rows] = await db.query(
     `SELECT n.notification_id,
@@ -112,8 +148,8 @@ export const getNotifications = async (req, res) => {
      LEFT JOIN schedules lrs ON lr.schedule_id = lrs.schedule_id
      LEFT JOIN shifts lrsh ON lrs.shift_id = lrsh.shift_id
      WHERE n.user_id=? 
-     ORDER BY n.created_at DESC`,
-    [user_id]
+      ORDER BY n.created_at DESC${limitClause}`,
+    params
   );
 
   res.json(rows);

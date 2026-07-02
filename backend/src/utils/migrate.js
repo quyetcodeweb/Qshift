@@ -21,6 +21,67 @@ const tableExists = async (tableName) => {
   return tables.length > 0;
 };
 
+const indexExists = async (tableName, indexName) => {
+  assertIdentifier(tableName);
+  assertIdentifier(indexName);
+
+  const [indexes] = await db.query(
+    `SHOW INDEX FROM \`${tableName}\` WHERE Key_name = ?`,
+    [indexName]
+  );
+
+  return indexes.length > 0;
+};
+
+const ensureIndex = async (tableName, indexName, columns) => {
+  try {
+    assertIdentifier(tableName);
+    assertIdentifier(indexName);
+
+    if (!(await tableExists(tableName)) || (await indexExists(tableName, indexName))) {
+      return;
+    }
+
+    await db.query(`ALTER TABLE \`${tableName}\` ADD INDEX \`${indexName}\` (${columns})`);
+    console.log(`Added index ${indexName} on ${tableName}`);
+  } catch (e) {
+    console.warn(`Could not ensure index ${indexName} on ${tableName}:`, e.message);
+  }
+};
+
+const ensurePerformanceIndexes = async () => {
+  await ensureIndex(
+    "schedules",
+    "idx_schedules_status_work_date_shift",
+    "status, work_date, shift_id"
+  );
+  await ensureIndex(
+    "schedules",
+    "idx_schedules_employee_work_date_status",
+    "employee_id, work_date, status"
+  );
+  await ensureIndex(
+    "notifications",
+    "idx_notifications_user_created_read",
+    "user_id, created_at, is_read"
+  );
+  await ensureIndex(
+    "attendance",
+    "idx_attendance_schedule_status",
+    "schedule_id, status"
+  );
+  await ensureIndex(
+    "availability_requests",
+    "idx_availability_requests_status_created",
+    "status, created_at"
+  );
+  await ensureIndex(
+    "shift_swap_requests",
+    "idx_shift_swap_status_updated",
+    "status, updated_at"
+  );
+};
+
 const ensureAvailabilityTables = async () => {
   try {
     if (!(await tableExists("employee_availability"))) {
@@ -102,6 +163,7 @@ const ensureAvailabilityTables = async () => {
 export const runMigrations = async () => {
   try {
     await ensureAvailabilityTables();
+    await ensurePerformanceIndexes();
 
     console.log("🔄 Checking for pending migrations...");
 
@@ -427,6 +489,8 @@ export const runMigrations = async () => {
     } catch (e) {
       console.warn("Could not ensure shift_swap_requests table:", e.message);
     }
+
+    await ensurePerformanceIndexes();
 
   } catch (err) {
     console.error("❌ Migration error:", err.message);

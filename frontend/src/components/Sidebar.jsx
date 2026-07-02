@@ -240,10 +240,10 @@ export default function Sidebar() {
       const userId = user?.user_id;
       if (!userId) return;
 
-      const res = await axios.get(`${API_URL}/notifications`, {
+      const res = await axios.get(`${API_URL}/notifications?summary=1`, {
         headers: { "user-id": userId },
       });
-      setCount((res.data || []).filter((item) => !item.is_read).length);
+      setCount(Number(res.data?.unread_count || 0));
     } catch (err) {
       console.error("Sidebar notifications:", err.response?.data || err.message);
     }
