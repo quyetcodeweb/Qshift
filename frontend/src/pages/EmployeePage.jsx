@@ -101,16 +101,6 @@ function money(value) {
   return number ? `${number.toLocaleString("vi-VN")} đ/giờ` : "-";
 }
 
-function initials(name) {
-  return String(name || "?")
-    .split(" ")
-    .filter(Boolean)
-    .slice(-2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
 function defaultPassword(employee) {
   const phone = String(employee?.phone || "");
   return phone.length >= 5 ? `A${phone.slice(-5)}` : "Chưa đủ SĐT";
@@ -120,17 +110,42 @@ function roleText(user) {
   return user?.role === "ADMIN" ? "Quản trị viên" : "Nhân viên";
 }
 
+function resolveAvatarUrl(value) {
+  const avatarUrl = String(value || "").trim();
+  if (!avatarUrl) return "";
+  if (
+    avatarUrl.startsWith("data:") ||
+    avatarUrl.startsWith("blob:") ||
+    /^https?:\/\//i.test(avatarUrl)
+  ) {
+    return avatarUrl;
+  }
+
+  const apiOrigin = API_URL.replace(/\/api\/?$/, "");
+  return `${apiOrigin}/${avatarUrl.replace(/^\/+/, "")}`;
+}
+
 function EmployeeAvatar({ employee, size = "md" }) {
+  const [failedUrl, setFailedUrl] = useState("");
   const dimension = size === "lg" ? "h-20 w-20 text-xl" : "h-11 w-11 text-sm";
+  const avatarUrl = resolveAvatarUrl(employee?.avatar_url);
+
+  if (!avatarUrl || failedUrl === avatarUrl) {
+    return (
+      <img
+        src={defaultEmployeeAvatar}
+        alt={`Ảnh đại diện mặc định của ${employee?.name || "nhân viên"}`}
+        className={`${dimension} shrink-0 rounded-xl bg-slate-100 object-cover ring-1 ring-slate-200`}
+      />
+    );
+  }
+
   return (
     <img
-      src={employee?.avatar_url || defaultEmployeeAvatar}
-      alt={employee?.name || "Nhan vien"}
-      onError={(event) => {
-        event.currentTarget.onerror = null;
-        event.currentTarget.src = defaultEmployeeAvatar;
-      }}
-      className={`${dimension} shrink-0 rounded-md object-cover ring-1 ring-gray-200`}
+      src={avatarUrl}
+      alt={`Ảnh đại diện của ${employee?.name || "nhân viên"}`}
+      onError={() => setFailedUrl(avatarUrl)}
+      className={`${dimension} shrink-0 rounded-xl bg-slate-100 object-cover ring-1 ring-slate-200`}
     />
   );
 }
@@ -150,6 +165,8 @@ export default function EmployeePage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [savingEmployee, setSavingEmployee] = useState(false);
   const [roleDrawerOpen, setRoleDrawerOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
@@ -311,6 +328,7 @@ export default function EmployeePage() {
   const openCreateForm = () => {
     setEditingEmployee(null);
     setForm(defaultForm);
+    setFormError("");
     setFormOpen(true);
   };
 
@@ -329,6 +347,7 @@ export default function EmployeePage() {
     }
 
     setEditingEmployee(detail);
+    setFormError("");
     setForm({
       name: detail.name || "",
       email: detail.email || "",
@@ -350,11 +369,13 @@ export default function EmployeePage() {
 
   const saveEmployee = async () => {
     if (!form.name || !form.phone) {
-      alert("Vui lòng nhập tên và số điện thoại");
+      setFormError("Vui lòng nhập họ tên và số điện thoại của nhân viên.");
       return;
     }
 
     try {
+      setSavingEmployee(true);
+      setFormError("");
       if (editingEmployee) {
         const { password, ...employeePayload } = form;
         await axios.put(
@@ -396,11 +417,13 @@ export default function EmployeePage() {
         message: `${form.name} đã được lưu vào hệ thống.`,
       });
     } catch (err) {
-      alert(
+      setFormError(
         err.response?.data?.message ||
           err.response?.data?.error ||
-          "Không thể thêm nhân viên",
+          "Không thể lưu nhân viên. Vui lòng thử lại.",
       );
+    } finally {
+      setSavingEmployee(false);
     }
   };
 
@@ -569,12 +592,12 @@ export default function EmployeePage() {
           </Typography>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <Button
             variant="outlined"
             size="sm"
             onClick={() => setRoleDrawerOpen(true)}
-            className="flex h-10 items-center gap-2 rounded-md border-gray-300 px-3 normal-case text-gray-900"
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border-gray-300 px-3 normal-case text-gray-900"
           >
             <ShieldCheckIcon className="h-5 w-5" />
             Vai trò
@@ -582,10 +605,11 @@ export default function EmployeePage() {
           <Button
             size="sm"
             onClick={openCreateForm}
-            className="flex h-10 w-10 items-center justify-center rounded-md bg-green-500 p-0"
+            className="flex h-10 items-center justify-center gap-2 rounded-lg !bg-green-600 px-4 normal-case !text-white shadow-none hover:!bg-green-700 hover:shadow-none"
             aria-label="Thêm nhân viên"
           >
             <PlusIcon className="h-5 w-5" />
+            <span>Thêm nhân viên</span>
           </Button>
         </div>
       </div>
@@ -617,7 +641,7 @@ export default function EmployeePage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[980px] text-left">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -710,6 +734,64 @@ export default function EmployeePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="divide-y divide-slate-100 lg:hidden">
+          {loading ? (
+            <div className="px-4 py-14 text-center">
+              <Spinner className="mx-auto h-8 w-8 text-blue-600" />
+            </div>
+          ) : pagedRows.length === 0 ? (
+            <div className="px-4 py-14 text-center text-sm font-medium text-slate-500">
+              Không tìm thấy nhân viên phù hợp
+            </div>
+          ) : (
+            pagedRows.map(({ employee, user }) => {
+              const disabled = user && !user.status;
+              return (
+                <button
+                  key={employee.employee_id}
+                  type="button"
+                  onClick={() => openEmployeeProfile(employee)}
+                  className={`w-full px-4 py-4 text-left transition active:bg-slate-100 ${
+                    disabled ? "bg-red-50/70" : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <EmployeeAvatar employee={employee} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-slate-950">
+                            {employee.name}
+                          </div>
+                          <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                            NV-{employee.employee_id} · {roleText(user)}
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ring-1 ring-inset ${statusStyle(employee.status)}`}
+                        >
+                          {displayStatus(employee.status)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-1.5 text-xs font-medium text-slate-600">
+                        <div className="truncate">
+                          {employee.phone || "Chưa có số điện thoại"}
+                        </div>
+                        <div className="truncate">
+                          {employee.email || "Chưa có email"}
+                        </div>
+                        <div>
+                          Ngày vào làm: {formatDate(employee.hire_date)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -825,14 +907,14 @@ export default function EmployeePage() {
                       ["Tên đăng nhập", profileUser?.username || "-"],
                       ["Role", roleText(profileUser)],
                       ["Email", selectedEmployee.email || "-"],
-                      ["Ngay sinh", formatDate(selectedEmployee.birth_date)],
-                      ["Gioi tinh", selectedEmployee.gender || "-"],
-                      ["Dia chi", selectedEmployee.address || "-"],
+                      ["Ngày sinh", formatDate(selectedEmployee.birth_date)],
+                      ["Giới tính", selectedEmployee.gender || "-"],
+                      ["Địa chỉ", selectedEmployee.address || "-"],
                       [
-                        "Nguoi lien he khan cap",
+                        "Người liên hệ khẩn cấp",
                         selectedEmployee.emergency_contact || "-",
                       ],
-                      ["SDT khan cap", selectedEmployee.emergency_phone || "-"],
+                      ["SĐT khẩn cấp", selectedEmployee.emergency_phone || "-"],
                       ["Số điện thoại", selectedEmployee.phone || "-"],
                       [
                         "Trạng thái hồ sơ",
@@ -907,10 +989,11 @@ export default function EmployeePage() {
           setEditingEmployee(null);
         }}
         size="lg"
-        className="flex max-h-[92dvh] flex-col overflow-hidden"
+        className="m-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none sm:m-auto sm:h-auto sm:max-h-[92dvh] sm:max-w-3xl sm:rounded-xl"
       >
-        <DialogHeader className="shrink-0 border-b border-gray-100">
-          <div>
+        <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-4 sm:px-6">
+          <div className="flex w-full items-start justify-between gap-4">
+            <div>
             <Typography variant="h5" className="font-bold text-gray-950">
               {editingEmployee ? "Sửa nhân viên" : "Thêm nhân viên"}
             </Typography>
@@ -919,12 +1002,30 @@ export default function EmployeePage() {
                 ? "Cập nhật thông tin hồ sơ nhân viên."
                 : "Tài khoản sẽ được tạo tự động theo số điện thoại."}
             </Typography>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFormOpen(false);
+                setEditingEmployee(null);
+                setFormError("");
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+              aria-label="Đóng biểu mẫu"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
           </div>
         </DialogHeader>
         <DialogBody className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div>
+            <div className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Thông tin cơ bản
+            </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Tên nhân viên"
+              label="Họ và tên *"
+              autoComplete="name"
               value={form.name}
               onChange={(event) =>
                 setForm({ ...form, name: event.target.value })
@@ -932,13 +1033,19 @@ export default function EmployeePage() {
             />
             <Input
               label="Email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
               value={form.email}
               onChange={(event) =>
                 setForm({ ...form, email: event.target.value })
               }
             />
             <Input
-              label="Số điện thoại"
+              label="Số điện thoại *"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               value={form.phone}
               onChange={(event) =>
                 setForm({ ...form, phone: event.target.value })
@@ -946,6 +1053,9 @@ export default function EmployeePage() {
             />
             <Input
               label="Lương / giờ"
+              type="number"
+              inputMode="numeric"
+              min="0"
               value={form.hourly_rate}
               onChange={(event) =>
                 setForm({ ...form, hourly_rate: event.target.value })
@@ -953,14 +1063,14 @@ export default function EmployeePage() {
             />
             <Input
               type="date"
-              label="Ngay sinh"
+              label="Ngày sinh"
               value={form.birth_date}
               onChange={(event) =>
                 setForm({ ...form, birth_date: event.target.value })
               }
             />
             <Select
-              label="Gioi tinh"
+              label="Giới tính"
               value={form.gender}
               onChange={(value) => setForm({ ...form, gender: value || "" })}
             >
@@ -971,14 +1081,17 @@ export default function EmployeePage() {
               ))}
             </Select>
             <Input
-              label="Nguoi lien he khan cap"
+              label="Người liên hệ khẩn cấp"
+              autoComplete="off"
               value={form.emergency_contact}
               onChange={(event) =>
                 setForm({ ...form, emergency_contact: event.target.value })
               }
             />
             <Input
-              label="SDT khan cap"
+              label="SĐT khẩn cấp"
+              type="tel"
+              inputMode="tel"
               value={form.emergency_phone}
               onChange={(event) =>
                 setForm({ ...form, emergency_phone: event.target.value })
@@ -986,7 +1099,7 @@ export default function EmployeePage() {
             />
             <label className="sm:col-span-2">
               <span className="mb-2 block text-sm font-medium text-blue-gray-500">
-                Dia chi
+                Địa chỉ
               </span>
               <textarea
                 value={form.address}
@@ -994,7 +1107,7 @@ export default function EmployeePage() {
                   setForm({ ...form, address: event.target.value })
                 }
                 rows={3}
-                className="w-full resize-none rounded-md border border-blue-gray-200 bg-transparent px-3 py-2.5 text-sm font-normal text-blue-gray-700 outline outline-0 transition-all placeholder-shown:border-blue-gray-200 focus:border-gray-900 focus:outline-0"
+                className="w-full resize-none rounded-lg border border-blue-gray-200 bg-transparent px-3 py-2.5 text-sm font-normal text-blue-gray-700 outline-none transition focus:border-blue-600"
               />
             </label>
             <Input
@@ -1029,35 +1142,50 @@ export default function EmployeePage() {
               />
             )}
           </div>
+          </div>
 
           {!editingEmployee && (
-            <div className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-medium text-blue-800">
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-medium leading-6 text-blue-800">
               Tên đăng nhập là số điện thoại. Mật khẩu mặc định là chữ A kèm 5
               số cuối của số điện thoại.
             </div>
           )}
           {editingEmployee && (
-            <div className="rounded-md border border-amber-100 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm font-medium leading-6 text-amber-800">
               Để trống mật khẩu mới nếu không muốn thay đổi mật khẩu tài khoản.
             </div>
           )}
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
+            >
+              {formError}
+            </div>
+          )}
         </DialogBody>
-        <DialogFooter className="shrink-0 gap-2 border-t border-gray-100 bg-white px-4 py-3">
+        <DialogFooter className="grid shrink-0 grid-cols-2 gap-2 border-t border-gray-100 bg-white px-4 py-3 sm:flex sm:px-6">
           <Button
             variant="text"
             onClick={() => {
               setFormOpen(false);
               setEditingEmployee(null);
             }}
-            className="rounded-md bg-red-400 normal-case text-white"
+            disabled={savingEmployee}
+            className="h-11 rounded-lg border border-slate-300 bg-white normal-case text-slate-700 shadow-none hover:bg-slate-50"
           >
             Hủy
           </Button>
           <Button
             onClick={saveEmployee}
-            className="rounded-md bg-light-green-400 normal-case text-white"
+            disabled={savingEmployee}
+            className="h-11 rounded-lg !bg-green-600 normal-case !text-white shadow-none hover:!bg-green-700 hover:shadow-none disabled:!bg-green-300"
           >
-            {editingEmployee ? "Cập nhật nhân viên" : "Lưu nhân viên"}
+            {savingEmployee
+              ? "Đang lưu..."
+              : editingEmployee
+                ? "Cập nhật nhân viên"
+                : "Thêm nhân viên"}
           </Button>
         </DialogFooter>
       </Dialog>
@@ -1078,7 +1206,7 @@ export default function EmployeePage() {
                 <Button
                   size="sm"
                   onClick={() => setCreateRoleOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-md bg-green-500 p-0"
+                  className="flex h-10 w-10 items-center justify-center rounded-md !bg-green-600 p-0 !text-white shadow-none hover:!bg-green-700"
                   aria-label="Thêm vai trò"
                 >
                   <PlusIcon className="h-5 w-5" />
@@ -1202,7 +1330,7 @@ export default function EmployeePage() {
                   <Button
                     onClick={addEmployeeRole}
                     disabled={!selectedRole}
-                    className="rounded-md bg-blue-600 normal-case"
+                    className="rounded-md !bg-blue-600 normal-case !text-white shadow-none hover:!bg-blue-700 disabled:!bg-blue-300"
                   >
                     Thêm
                   </Button>
@@ -1304,7 +1432,7 @@ export default function EmployeePage() {
           <Button
             onClick={createRole}
             disabled={!newRoleName.trim()}
-            className="rounded-md bg-green-500 normal-case text-white hover:bg-green-600"
+            className="rounded-md !bg-green-600 normal-case !text-white shadow-none hover:!bg-green-700 disabled:!bg-green-300"
           >
             Tạo vai trò
           </Button>

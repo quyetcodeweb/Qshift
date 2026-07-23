@@ -161,22 +161,16 @@ export default function NotificationPage() {
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [readFilter, setReadFilter] = useState("ALL");
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [visibleCount, setVisibleCount] = useState(notificationBatchSize);
   const loadMoreRef = useRef(null);
-  const dragSelectRef = useRef({ active: false, shouldSelect: true });
   const role = getRole();
   const navigate = useNavigate();
 
   const unreadCount = useMemo(
     () => data.filter((item) => !item.is_read).length,
     [data],
-  );
-  const selectedUnreadCount = useMemo(
-    () =>
-      data.filter(
-        (item) => selectedIds.includes(item.notification_id) && !item.is_read,
-      ).length,
-    [data, selectedIds],
   );
   const notificationTypeOptions = useMemo(() => {
     const counts = data.reduce((acc, item) => {
@@ -193,10 +187,15 @@ export default function NotificationPage() {
   }, [data]);
   const filteredNotifications = useMemo(
     () =>
-      typeFilter === "ALL"
-        ? data
-        : data.filter((item) => notificationCategoryKey(item.type) === typeFilter),
-    [data, typeFilter],
+      data.filter((item) => {
+        const matchesType =
+          typeFilter === "ALL" || notificationCategoryKey(item.type) === typeFilter;
+        const matchesRead =
+          readFilter === "ALL" ||
+          (readFilter === "UNREAD" ? !item.is_read : Boolean(item.is_read));
+        return matchesType && matchesRead;
+      }),
+    [data, readFilter, typeFilter],
   );
   const visibleNotifications = useMemo(
     () => filteredNotifications.slice(0, visibleCount),
@@ -205,10 +204,6 @@ export default function NotificationPage() {
   const visibleIds = useMemo(
     () => visibleNotifications.map((item) => item.notification_id),
     [visibleNotifications],
-  );
-  const filteredIds = useMemo(
-    () => filteredNotifications.map((item) => item.notification_id),
-    [filteredNotifications],
   );
   const hasMoreNotifications = visibleCount < filteredNotifications.length;
   const allVisibleSelected =
@@ -271,60 +266,10 @@ export default function NotificationPage() {
     }
   };
 
-  const markSelectedRead = async () => {
-    try {
-      const unreadSelectedIds = data
-        .filter((item) => selectedIds.includes(item.notification_id) && !item.is_read)
-        .map((item) => item.notification_id);
-
-      if (!unreadSelectedIds.length) return;
-
-      await Promise.all(
-        unreadSelectedIds.map((id) => axios.patch(`${API_URL}/notifications/${id}`)),
-      );
-
-      setData((prev) =>
-        prev.map((n) =>
-          unreadSelectedIds.includes(n.notification_id) ? { ...n, is_read: 1 } : n,
-        ),
-      );
-      refreshNotificationCount();
-    } catch (err) {
-      console.error(err);
-      alert("Không thể đánh dấu đã xem các thông báo đã chọn");
-    }
-  };
-
   const toggleSelected = (id) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
-  };
-
-  const setSelectedState = (id, shouldSelect) => {
-    setSelectedIds((prev) => {
-      const isSelected = prev.includes(id);
-      if (shouldSelect && !isSelected) return [...prev, id];
-      if (!shouldSelect && isSelected) {
-        return prev.filter((item) => item !== id);
-      }
-      return prev;
-    });
-  };
-
-  const startDragSelect = (event, id) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    const shouldSelect = !selectedIds.includes(id);
-    dragSelectRef.current = { active: true, shouldSelect };
-    setSelectedState(id, shouldSelect);
-  };
-
-  const dragOverSelect = (id) => {
-    if (!dragSelectRef.current.active) return;
-    setSelectedState(id, dragSelectRef.current.shouldSelect);
   };
 
   const toggleSelectAll = () => {
@@ -337,13 +282,16 @@ export default function NotificationPage() {
 
   const deleteSelected = async () => {
     if (!selectedIds.length) return;
-    const confirmed = await window.appConfirm?.({
+    const confirmOptions = {
       title: "Xóa thông báo",
       message: `Xóa ${selectedIds.length} thông báo đã chọn?`,
       confirmText: "Xóa",
       cancelText: "Giữ lại",
       type: "warning",
-    });
+    };
+    const confirmed = window.appConfirm
+      ? await window.appConfirm(confirmOptions)
+      : window.confirm(confirmOptions.message);
     if (!confirmed) return;
 
     try {
@@ -359,46 +307,7 @@ export default function NotificationPage() {
         prev.filter((item) => !selectedIds.includes(item.notification_id)),
       );
       setSelectedIds([]);
-      refreshNotificationCount();
-    } catch (err) {
-      console.error(err);
-      alert(
-        err.response?.data?.detail ||
-          err.response?.data?.message ||
-          "Không thể xóa thông báo",
-      );
-    }
-  };
-
-  const deleteFiltered = async () => {
-    if (!filteredIds.length) return;
-    const filterLabel =
-      typeFilter === "ALL"
-        ? "tất cả thông báo"
-        : `tất cả thông báo loại ${notificationTone(typeFilter).label}`;
-    const confirmed = await window.appConfirm?.({
-      title: "Xóa thông báo",
-      message: `Xóa ${filteredIds.length} ${filterLabel}?`,
-      confirmText: "Xóa",
-      cancelText: "Giữ lại",
-      type: "warning",
-    });
-    if (!confirmed) return;
-
-    try {
-      const userId = getUserId();
-      if (!userId) return;
-
-      await axios.delete(`${API_URL}/notifications`, {
-        headers: { "user-id": userId },
-        data: { ids: filteredIds },
-      });
-
-      setData((prev) =>
-        prev.filter((item) => !filteredIds.includes(item.notification_id)),
-      );
-      setSelectedIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
-      setVisibleCount(notificationBatchSize);
+      setBulkDeleteMode(false);
       refreshNotificationCount();
     } catch (err) {
       console.error(err);
@@ -568,16 +477,7 @@ export default function NotificationPage() {
 
   useEffect(() => {
     setVisibleCount(notificationBatchSize);
-  }, [typeFilter]);
-
-  useEffect(() => {
-    const stopDragSelect = () => {
-      dragSelectRef.current = { active: false, shouldSelect: true };
-    };
-
-    window.addEventListener("mouseup", stopDragSelect);
-    return () => window.removeEventListener("mouseup", stopDragSelect);
-  }, []);
+  }, [readFilter, typeFilter]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -600,6 +500,28 @@ export default function NotificationPage() {
 
   return (
     <div className="mx-auto max-w-[1180px] space-y-5">
+      <header className="flex flex-col gap-4 rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+            <BellIcon className="h-4 w-4" /> Trung tâm cập nhật
+          </div>
+          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+            Thông báo
+          </h1>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            Theo dõi yêu cầu, thay đổi lịch làm và các cập nhật quan trọng.
+          </p>
+        </div>
+        <div className="inline-flex w-fit items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-sm">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+            <BellIcon className="h-5 w-5" />
+          </span>
+          <div>
+            <div className="text-lg font-black text-slate-950">{unreadCount}</div>
+            <div className="text-xs font-bold text-slate-500">chưa đọc</div>
+          </div>
+        </div>
+      </header>
       {loading && data.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
           <ArrowPathIcon className="mx-auto h-8 w-8 animate-spin text-cyan-600" />
@@ -619,41 +541,26 @@ export default function NotificationPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="sticky top-3 z-30 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <div className="sticky top-3 z-30 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAll}
-                    className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                  />
-                  Chọn tất cả đã tải
-                </label>
-                {selectedIds.length > 0 && (
-                  <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-700">
-                    {selectedIds.length} đã chọn
-                  </span>
-                )}
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
+                <FunnelIcon className="h-5 w-5 shrink-0 text-emerald-600" />
+                {[{ key: "ALL", label: "Tất cả", count: data.length }, ...notificationTypeOptions].map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setTypeFilter(option.key)}
+                    className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold transition ${
+                      typeFilter === option.key
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                    }`}
+                  >
+                    {option.label} <span className="opacity-75">{option.count}</span>
+                  </button>
+                ))}
               </div>
               <div className="flex flex-wrap gap-2">
-                <label className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
-                  <FunnelIcon className="h-5 w-5 text-slate-500" />
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="min-w-36 bg-transparent text-sm font-bold outline-none"
-                    aria-label="Lọc loại thông báo"
-                  >
-                    <option value="ALL">Tất cả loại ({data.length})</option>
-                    {notificationTypeOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label} ({option.count})
-                      </option>
-                    ))}
-                  </select>
-                </label>
               <button
                 type="button"
                 onClick={fetchData}
@@ -665,15 +572,6 @@ export default function NotificationPage() {
               </button>
               <button
                 type="button"
-                onClick={deleteFiltered}
-                disabled={filteredIds.length === 0}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-100 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <TrashIcon className="h-5 w-5" />
-                Xóa tất cả
-              </button>
-              <button
-                type="button"
                 onClick={markAllRead}
                 disabled={unreadCount === 0}
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -681,28 +579,68 @@ export default function NotificationPage() {
                 <CheckCircleIcon className="h-5 w-5" />
                 Đã xem tất cả
               </button>
-              {selectedIds.length > 0 && (
+              {!bulkDeleteMode ? (
+                <button
+                  type="button"
+                  onClick={() => setBulkDeleteMode(true)}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-100 transition hover:bg-red-100"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                  Xóa nhiều
+                </button>
+              ) : (
                 <>
                   <button
                     type="button"
-                    onClick={markSelectedRead}
-                    disabled={selectedUnreadCount === 0}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={toggleSelectAll}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                   >
                     <CheckCircleIcon className="h-5 w-5" />
-                    Đã xem đã chọn
+                    {allVisibleSelected ? "Bỏ chọn tất cả" : "Chọn tất cả"}
                   </button>
                   <button
                     type="button"
                     onClick={deleteSelected}
+                    disabled={selectedIds.length === 0}
                     className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700"
                   >
                     <TrashIcon className="h-5 w-5" />
-                    Xóa đã chọn
+                    Xóa đã chọn {selectedIds.length > 0 ? `(${selectedIds.length})` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedIds([]);
+                      setBulkDeleteMode(false);
+                    }}
+                    className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                  >
+                    Hủy
                   </button>
                 </>
               )}
               </div>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-100 pt-3">
+              <span className="shrink-0 text-xs font-black uppercase tracking-wide text-slate-400">Trạng thái</span>
+              {[
+                ["ALL", "Tất cả", data.length],
+                ["UNREAD", "Chưa đọc", unreadCount],
+                ["READ", "Đã đọc", data.length - unreadCount],
+              ].map(([key, label, count]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setReadFilter(key)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                    readFilter === key
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              ))}
             </div>
           </div>
           {filteredNotifications.length === 0 ? (
@@ -729,37 +667,43 @@ export default function NotificationPage() {
             return (
               <article
                 key={n.notification_id}
-                onClick={() => {
+                onClick={(event) => {
+                  if (bulkDeleteMode) {
+                    if (event.target.closest("button, input, textarea, select, a, label")) {
+                      return;
+                    }
+                    toggleSelected(n.notification_id);
+                    return;
+                  }
                   if (n.type === "AVAILABILITY_FILL_REQUEST" && role === "EMPLOYEE") {
                     return;
                   }
                   markRead(n.notification_id);
                 }}
-                className={`group relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                  n.is_read
-                    ? "border-slate-200"
-                    : "border-cyan-200 ring-1 ring-cyan-100"
+                className={`group relative overflow-hidden rounded-2xl border p-4 shadow-sm transition-[transform,box-shadow,border-color,background-color] duration-300 ease-out hover:-translate-y-0.5 hover:shadow-md active:scale-[0.995] ${
+                  bulkDeleteMode
+                    ? selectedIds.includes(n.notification_id)
+                      ? "request-selection-enter cursor-pointer border-red-300 bg-red-50 ring-1 ring-red-100"
+                      : "cursor-pointer border-slate-200 bg-white hover:border-red-200 hover:bg-red-50/40"
+                    : n.is_read
+                      ? "border-slate-200 bg-white"
+                      : "border-emerald-200 bg-emerald-50/35 ring-1 ring-emerald-100"
                 }`}
               >
-                <label
-                  className="absolute left-4 top-4 z-10 inline-flex cursor-pointer rounded-lg bg-white/90 p-1 shadow-sm ring-1 ring-slate-200"
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => startDragSelect(e, n.notification_id)}
-                  onMouseEnter={() => dragOverSelect(n.notification_id)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(n.notification_id)}
-                    onChange={() => toggleSelected(n.notification_id)}
-                    className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                    aria-label="Chọn thông báo"
-                  />
-                </label>
+                {bulkDeleteMode && (
+                  <span className={`absolute left-4 top-4 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition ${
+                    selectedIds.includes(n.notification_id)
+                      ? "border-red-600 bg-red-600 text-white"
+                      : "border-slate-300 bg-white text-transparent"
+                  }`}>
+                    <CheckCircleIcon className="h-4 w-4" />
+                  </span>
+                )}
                 {!n.is_read && (
-                  <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-500" />
+                  <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-emerald-500 transition-opacity duration-300" />
                 )}
 
-                <div className="grid gap-3 pl-8 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+                <div className={`grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] ${bulkDeleteMode ? "pl-8" : ""}`}>
                   <div
                     className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone.className}`}
                   >

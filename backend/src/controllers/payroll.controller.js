@@ -833,3 +833,31 @@ export async function respondPayrollFeedback(req, res) {
     res.status(500).json({ message: error.message });
   }
 }
+
+export async function deletePayrollFeedback(req, res) {
+  try {
+    const user = await getUser(req.user?.user_id);
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    await ensurePayrollFeedbackTable();
+    const feedbackId = Number(req.params.id);
+    if (!feedbackId) {
+      return res.status(400).json({ message: "Ma phan hoi khong hop le" });
+    }
+
+    const [result] = await database.query(
+      "DELETE FROM payroll_feedback WHERE feedback_id = ?",
+      [feedbackId],
+    );
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: "Khong tim thay phan hoi" });
+    }
+
+    res.json({ message: "Da xoa phan hoi luong" });
+  } catch (error) {
+    console.error("[deletePayrollFeedback] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}

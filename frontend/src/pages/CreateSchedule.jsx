@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   AdjustmentsHorizontalIcon,
   CalendarDaysIcon,
+  CheckCircleIcon,
   ClockIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
@@ -169,6 +170,7 @@ export default function CreateSchedule() {
   const [filterEndDate, setFilterEndDate] = useState("");
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const [selectedScheduleIds, setSelectedScheduleIds] = useState([]);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [viewMonth, setViewMonth] = useState("");
   const [viewYear, setViewYear] = useState("");
   const [page, setPage] = useState(1);
@@ -480,6 +482,12 @@ export default function CreateSchedule() {
       pagedScheduleIds.forEach((id) => currentSet.add(id));
       return [...currentSet];
     });
+  };
+
+  const handleScheduleCardClick = (event, scheduleId) => {
+    if (!bulkDeleteMode) return;
+    if (event.target.closest("button, input, textarea, select, a")) return;
+    toggleScheduleSelection(scheduleId);
   };
 
   const deleteSchedulesBulk = async (schedulesToDelete, label) => {
@@ -915,54 +923,53 @@ export default function CreateSchedule() {
               </Select>
             </div>
             <div className="flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
+              {bulkDeleteMode ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={toggleCurrentPageSelection}
+                      disabled={pagedSchedules.length === 0}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {allPageSelected ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                    </button>
+                    <span className="text-sm font-semibold text-red-700">
+                      Đã chọn {selectedSchedules.length} ca
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={selectedSchedules.length === 0}
+                      onClick={() => deleteSchedulesBulk(selectedSchedules, "các ca đã chọn")}
+                      className="flex items-center gap-2 rounded-lg !bg-red-600 normal-case !text-white shadow-none hover:!bg-red-700"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                      Xóa đã chọn
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBulkDeleteMode(false);
+                        setSelectedScheduleIds([]);
+                      }}
+                      className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-bold text-gray-600 transition hover:bg-gray-100"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </>
+              ) : (
                 <button
                   type="button"
-                  onClick={toggleCurrentPageSelection}
-                  disabled={pagedSchedules.length === 0}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 bg-white px-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => setBulkDeleteMode(true)}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 text-sm font-bold text-red-700 transition hover:bg-red-50"
                 >
-                  <input
-                    type="checkbox"
-                    checked={allPageSelected}
-                    readOnly
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  {allPageSelected ? "Bỏ chọn trang này" : "Chọn trang này"}
+                  <TrashIcon className="h-4 w-4" />
+                  Xóa nhiều
                 </button>
-                <span className="text-sm font-semibold text-gray-500">
-                  Đã chọn {selectedSchedules.length} ca
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  disabled={selectedSchedules.length === 0}
-                  onClick={() =>
-                    deleteSchedulesBulk(selectedSchedules, "các ca đã chọn")
-                  }
-                  className="flex items-center gap-2 rounded-md border-red-200 normal-case text-red-700"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                  Xóa đã chọn
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  disabled={filteredSchedules.length === 0}
-                  onClick={() =>
-                    deleteSchedulesBulk(
-                      filteredSchedules,
-                      "toàn bộ ca trong bộ lọc hiện tại",
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-md border-red-300 bg-red-50 normal-case text-red-700"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                  Xóa tất cả
-                </Button>
-              </div>
+              )}
             </div>
           </div>
 
@@ -979,28 +986,31 @@ export default function CreateSchedule() {
               pagedSchedules.map((schedule) => (
                 <div
                   key={schedule.schedule_id}
+                  onClick={(event) => handleScheduleCardClick(event, schedule.schedule_id)}
                   className={`flex items-stretch gap-3 px-4 py-4 transition hover:bg-gray-50 ${
+                    bulkDeleteMode ? "cursor-pointer" : ""
+                  } ${
                     selectedScheduleIdSet.has(Number(schedule.schedule_id))
-                      ? "bg-blue-50/50"
+                      ? "request-selection-enter bg-red-50 ring-1 ring-inset ring-red-200"
                       : ""
                   }`}
                 >
-                  <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center self-center rounded-md border border-gray-200 bg-white hover:border-blue-300">
-                    <input
-                      type="checkbox"
-                      checked={selectedScheduleIdSet.has(
-                        Number(schedule.schedule_id),
-                      )}
-                      onChange={() =>
-                        toggleScheduleSelection(schedule.schedule_id)
-                      }
-                      className="h-4 w-4 rounded border-gray-300"
-                      aria-label={`Chọn ca ${schedule.shift_name} của ${schedule.employee_name || "nhân viên"}`}
-                    />
-                  </label>
+                  {bulkDeleteMode && (
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center self-center rounded-md border transition ${
+                      selectedScheduleIdSet.has(Number(schedule.schedule_id))
+                        ? "border-red-500 bg-red-500 text-white"
+                        : "border-gray-200 bg-white text-transparent"
+                    }`}>
+                      <CheckCircleIcon className="h-5 w-5" />
+                    </span>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setSelectedSchedule(schedule)}
+                    onClick={() =>
+                      bulkDeleteMode
+                        ? toggleScheduleSelection(schedule.schedule_id)
+                        : setSelectedSchedule(schedule)
+                    }
                     className="grid min-w-0 flex-1 gap-3 text-left lg:grid-cols-[120px_1fr_1fr_120px_130px]"
                   >
                     <div>

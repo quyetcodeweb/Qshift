@@ -43,13 +43,13 @@ export const sendAvailabilityRequest = async (req, res) => {
       return res.status(400).json({ message: "month and year are required" });
     }
 
-    const count = await sendFillRequestToEmployees(
+    const result = await sendFillRequestToEmployees(
       Number(month),
       Number(year),
       employee_id ? Number(employee_id) : null,
     );
 
-    res.json({ message: "Sent request", count });
+    res.json({ message: "Sent request", ...result });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });

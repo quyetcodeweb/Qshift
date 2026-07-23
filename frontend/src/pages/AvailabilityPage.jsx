@@ -89,6 +89,7 @@ export default function AvailabilityPage() {
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [requestMeta, setRequestMeta] = useState(null);
+  const [sendingFillRequest, setSendingFillRequest] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
   const isEmployee = role === "EMPLOYEE";
@@ -406,12 +407,14 @@ export default function AvailabilityPage() {
   };
 
   const sendFillRequest = async (target = "selected") => {
+    if (sendingFillRequest) return;
     try {
       if (target === "selected" && !employeeId) {
         alert("Vui lòng chọn nhân viên cần gửi yêu cầu");
         return;
       }
 
+      setSendingFillRequest(target);
       const res = await axios.post(
         `${API_URL}/notifications/send`,
         {
@@ -421,14 +424,33 @@ export default function AvailabilityPage() {
         },
         { headers: authHeaders() },
       );
-      alert(
-        target === "selected"
-          ? `Đã gửi yêu cầu cho ${selectedEmployee?.name || "nhân viên đã chọn"}!`
-          : `Đã gửi yêu cầu cho ${res.data.count || 0} nhân viên!`,
-      );
+      const sentCount = Number(res.data.count || 0);
+      const existingCount = Number(res.data.existingCount || 0);
+      const message = sentCount
+        ? target === "selected"
+          ? `Đã gửi yêu cầu cho ${selectedEmployee?.name || "nhân viên đã chọn"}.`
+          : `Đã gửi yêu cầu cho ${sentCount} nhân viên.`
+        : target === "selected"
+          ? "Nhân viên này đã có yêu cầu cho tháng đang chọn."
+          : "Tất cả nhân viên đã có yêu cầu cho tháng đang chọn.";
+
+      window.appPopup?.({
+        type: sentCount ? "success" : "info",
+        title: sentCount ? "Đã gửi yêu cầu" : "Không tạo yêu cầu mới",
+        message: existingCount && sentCount
+          ? `${message} Đã bỏ qua ${existingCount} yêu cầu đã tồn tại.`
+          : message,
+      });
+      window.dispatchEvent(new Event("notification-count-changed"));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Không thể gửi yêu cầu!");
+      window.appPopup?.({
+        type: "error",
+        title: "Không thể gửi yêu cầu",
+        message: err.response?.data?.message || "Vui lòng thử lại.",
+      });
+    } finally {
+      setSendingFillRequest("");
     }
   };
 
@@ -660,18 +682,27 @@ export default function AvailabilityPage() {
                 <Button
                   variant="outlined"
                   onClick={() => sendFillRequest("selected")}
-                  disabled={!employeeId}
-                  className="flex w-full items-center justify-center gap-2 rounded-md border-blue-200 normal-case text-blue-700 disabled:opacity-50"
+                  disabled={!employeeId || Boolean(sendingFillRequest)}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border-emerald-200 normal-case text-emerald-700 shadow-none hover:bg-emerald-50 disabled:opacity-50"
                 >
-                  <PaperAirplaneIcon className="h-5 w-5" />
-                  Gửi yêu cầu nhân viên đang chọn
+                  {sendingFillRequest === "selected" ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <PaperAirplaneIcon className="h-5 w-5" />
+                  )}
+                  {sendingFillRequest === "selected" ? "Đang gửi..." : "Gửi cho nhân viên"}
                 </Button>
                 <Button
                   onClick={() => sendFillRequest("all")}
-                  className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 normal-case text-white"
+                  disabled={Boolean(sendingFillRequest)}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg !bg-green-600 normal-case !text-white shadow-none hover:!bg-green-700 hover:shadow-none disabled:!bg-green-300"
                 >
-                  <UserGroupIcon className="h-5 w-5" />
-                  Gửi yêu cầu tất cả nhân viên
+                  {sendingFillRequest === "all" ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <UserGroupIcon className="h-5 w-5" />
+                  )}
+                  {sendingFillRequest === "all" ? "Đang gửi..." : "Gửi cho tất cả"}
                 </Button>
               </div>
             )}
@@ -686,6 +717,9 @@ export default function AvailabilityPage() {
               </Typography>
               <Typography className="text-sm text-gray-500">
                 {selectedEmployee?.name || "Chưa chọn nhân viên"} · Tháng {month}/{year}
+              </Typography>
+              <Typography className="mt-1 text-xs font-semibold text-gray-400">
+                R = Rảnh · — = Không rảnh
               </Typography>
               {isLockedAfterSubmit && (
                 <Typography className="mt-1 text-sm font-semibold text-amber-700">
@@ -740,9 +774,9 @@ export default function AvailabilityPage() {
                     {shifts.map((shift) => (
                       <th
                         key={shift.shift_id}
-                        className="sticky top-0 z-10 min-w-44 border-b border-gray-200 bg-gray-50 px-3 py-3"
+                        className="sticky top-0 z-10 min-w-28 border-b border-gray-200 bg-gray-50 px-2 py-3"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center gap-2 text-center">
                           <span
                             className="h-2.5 w-2.5 rounded-full"
                             style={{ backgroundColor: shift.color || "#2563eb" }}
@@ -772,19 +806,22 @@ export default function AvailabilityPage() {
                           {shifts.map((shift) => {
                             const checked = Boolean(grid[day]?.[shift.shift_id]);
                             return (
-                              <td key={shift.shift_id} className="border-b border-gray-100 bg-white px-3 py-3 group-hover:bg-blue-50">
+                              <td key={shift.shift_id} className="border-b border-gray-100 bg-white px-2 py-2 group-hover:bg-blue-50">
                                 <button
                                   type="button"
                                   onClick={() => toggle(day, shift.shift_id)}
                                   disabled={!canEditGrid}
-                                  className={`flex h-10 w-full items-center justify-center rounded-md border text-sm font-bold transition ${
+                                  title={checked ? "Rảnh" : "Không rảnh"}
+                                  aria-label={checked ? "Đánh dấu không rảnh" : "Đánh dấu rảnh"}
+                                  className={`mx-auto flex h-8 w-12 items-center justify-center rounded-md border text-xs font-bold transition ${
                                     checked
                                       ? "border-green-200 bg-green-50 text-green-700"
                                       : "border-gray-200 bg-gray-50 text-gray-400 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                                   }`}
                                   aria-pressed={checked}
                                 >
-                                  {checked ? "Rảnh" : "Không"}
+                                  <span aria-hidden="true">{checked ? "R" : "—"}</span>
+                                  <span className="sr-only">{checked ? "Rảnh" : "Không rảnh"}</span>
                                 </button>
                               </td>
                             );

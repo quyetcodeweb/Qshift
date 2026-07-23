@@ -235,6 +235,32 @@ export async function getShiftSwapOptions(req, res) {
   }
 }
 
+export async function deleteShiftSwapRequest(req, res) {
+  try {
+    const role = await getRequestRole(req);
+    if (role !== "ADMIN") {
+      return res.status(403).json({ message: "Chỉ admin có thể xóa yêu cầu đổi ca" });
+    }
+
+    await ensureShiftSwapTable();
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: "Mã yêu cầu không hợp lệ" });
+
+    const [result] = await database.query(
+      "DELETE FROM shift_swap_requests WHERE swap_request_id = ?",
+      [id],
+    );
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: "Không tìm thấy yêu cầu đổi ca" });
+    }
+
+    res.json({ message: "Đã xóa yêu cầu đổi ca" });
+  } catch (error) {
+    console.error("[deleteShiftSwapRequest] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+}
+
 export async function createShiftSwapRequest(req, res) {
   try {
     await ensureShiftSwapTable();

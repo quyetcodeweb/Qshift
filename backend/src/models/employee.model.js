@@ -58,6 +58,7 @@ export const getEmployees = async () => {
       e.name,
       e.email,
       e.phone,
+      e.avatar_url,
       CAST(e.hourly_rate AS CHAR) AS hourly_rate,
       DATE_FORMAT(e.birth_date, '%Y-%m-%d') AS birth_date,
       DATE_FORMAT(e.hire_date, '%Y-%m-%d') AS hire_date,

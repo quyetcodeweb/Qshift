@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@material-tailwind/react";
 import axios from "axios";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import DraftSchedulesModal from "./DraftSchedulesModal";
 import { API_URL } from "../services/api";
 
@@ -203,6 +204,7 @@ function RoleRequirementsDialog({
   setRoleRequirement,
   clearRoleRequirements,
 }) {
+  const [showPriorityHelp, setShowPriorityHelp] = useState(false);
   return (
     <Dialog
       open={open}
@@ -221,17 +223,34 @@ function RoleRequirementsDialog({
                 Để trống nếu ca không cần giới hạn vai trò.
               </Typography>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100"
-            >
-              Đóng
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowPriorityHelp((open) => !open)}
+                title="Ưu tiên cao được xếp trước. Chọn Cao, Trung bình hoặc Thấp thay vì nhập số."
+                aria-expanded={showPriorityHelp}
+                className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              >
+                <InformationCircleIcon className="h-4 w-4" />
+                Hướng dẫn
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 sm:p-5">
+          {showPriorityHelp && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">
+              <span className="font-bold">Cách dùng:</span> nhập số lượng cần có cho từng vai trò trong ca. Ưu tiên <span className="font-bold">Cao</span> được hệ thống xếp trước, tiếp theo là Trung bình rồi Thấp. Nếu không cần vai trò đó, đặt số lượng là 0.
+            </div>
+          )}
           {roles.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-500">
               Chưa có vai trò để cấu hình.
@@ -242,7 +261,7 @@ function RoleRequirementsDialog({
                 <thead className="sticky top-0 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="w-44 px-3 py-3">Ca</th>
-                    {roles.map((role) => (
+                          {roles.map((role) => (
                       <th key={role.role_id} className="px-3 py-3 text-center">
                         <span className="block max-w-28 truncate normal-case">
                           {role.role_name}
@@ -266,7 +285,7 @@ function RoleRequirementsDialog({
                           {formatTime(shift.end_time)}
                         </div>
                       </td>
-                      {roles.map((role) => (
+                          {roles.map((role) => (
                         <td
                           key={role.role_id}
                           className="px-3 py-3 text-center"
@@ -295,9 +314,7 @@ function RoleRequirementsDialog({
                               className="h-9 w-12 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-medium text-slate-950 outline-none focus:border-blue-600"
                               title="Số lượng mong muốn"
                             />
-                            <input
-                              type="number"
-                              min="1"
+                            <select
                               value={
                                 roleRequirements[shift.shift_id]?.[
                                   role.role_id
@@ -311,9 +328,14 @@ function RoleRequirementsDialog({
                                   event.target.value,
                                 )
                               }
-                              className="h-9 w-12 rounded-md border border-slate-300 bg-white px-2 text-center text-sm font-medium text-slate-950 outline-none focus:border-blue-600"
-                              title="Ưu tiên: số nhỏ hơn được xếp trước"
-                            />
+                              className="h-9 w-[76px] rounded-md border border-slate-300 bg-white px-1 text-center text-xs font-semibold text-slate-950 outline-none focus:border-emerald-600"
+                              title="Cao được xếp trước, tiếp theo là Trung bình và Thấp"
+                              aria-label={`Ưu tiên vai trò ${role.role_name} cho ca ${shift.shift_name}`}
+                            >
+                              <option value="1">Cao</option>
+                              <option value="2">TB</option>
+                              <option value="3">Thấp</option>
+                            </select>
                           </div>
                         </td>
                       ))}

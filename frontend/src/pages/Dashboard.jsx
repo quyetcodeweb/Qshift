@@ -4,6 +4,7 @@ import {
   AdjustmentsHorizontalIcon,
   ArrowPathIcon,
   BriefcaseIcon,
+  CakeIcon,
   CalendarDaysIcon,
   ChartBarIcon,
   CheckCircleIcon,
@@ -161,15 +162,23 @@ function parseBirthdayParts(value) {
   }
 
   const text = String(value).trim();
-  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const localMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const match = isoMatch || localMatch;
   if (match) {
+    const year = Number(isoMatch ? match[1] : match[3]);
     const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    const day = Number(isoMatch ? match[3] : match[1]);
+    const candidate = new Date(year, month - 1, day);
+    const isValid =
+      candidate.getFullYear() === year &&
+      candidate.getMonth() === month - 1 &&
+      candidate.getDate() === day;
+    if (isValid) {
       return {
         month,
         day,
-        normalized: `${match[1]}-${String(month).padStart(2, "0")}-${String(
+        normalized: `${year}-${String(month).padStart(2, "0")}-${String(
           day,
         ).padStart(2, "0")}`,
       };
@@ -187,11 +196,18 @@ function parseBirthdayParts(value) {
 
 function getUpcomingBirthdays(employees) {
   const now = new Date();
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  );
+  const startDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const birthdayInYear = (year, month, day) => {
+    const candidate = new Date(year, month - 1, day);
+    if (candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+      return candidate;
+    }
+
+    // Nhân viên sinh ngày 29/02 được tính vào 28/02 ở năm không nhuận.
+    return new Date(year, 1, 28);
+  };
+
   return employees
     .filter(isActiveEmployee)
     .map((employee) => {
@@ -199,20 +215,30 @@ function getUpcomingBirthdays(employees) {
       const birthdayParts = parseBirthdayParts(birthday);
       if (!birthdayParts) return null;
 
-      let nextBirthday = new Date(
-        start.getFullYear(),
-        birthdayParts.month - 1,
+      let nextBirthday = birthdayInYear(
+        now.getFullYear(),
+        birthdayParts.month,
         birthdayParts.day,
       );
-      if (nextBirthday < start) {
-        nextBirthday = new Date(
-          start.getFullYear() + 1,
-          birthdayParts.month - 1,
+      let birthdayDay = Date.UTC(
+        nextBirthday.getFullYear(),
+        nextBirthday.getMonth(),
+        nextBirthday.getDate(),
+      );
+      if (birthdayDay < startDay) {
+        nextBirthday = birthdayInYear(
+          now.getFullYear() + 1,
+          birthdayParts.month,
           birthdayParts.day,
+        );
+        birthdayDay = Date.UTC(
+          nextBirthday.getFullYear(),
+          nextBirthday.getMonth(),
+          nextBirthday.getDate(),
         );
       }
 
-      const daysLeft = Math.ceil((nextBirthday - start) / 86400000);
+      const daysLeft = Math.round((birthdayDay - startDay) / 86400000);
       return {
         ...employee,
         birthday: birthdayParts.normalized,
@@ -221,7 +247,7 @@ function getUpcomingBirthdays(employees) {
       };
     })
     .filter(Boolean)
-    .filter((employee) => employee.daysLeft <= 30)
+    .filter((employee) => employee.daysLeft >= 0 && employee.daysLeft <= 40)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
@@ -395,19 +421,15 @@ function buildTrend(
   }));
 }
 
-function LineChart({ data }) {
+function LineChart({ data, visibleSeries }) {
   const width = 720;
   const height = 260;
   const padding = { top: 24, right: 28, bottom: 46, left: 42 };
   const maxValue = Math.max(
     1,
-    ...data.flatMap((item) => [
-      item.shifts,
-      item.completed,
-      item.late,
-      item.leave,
-      item.missing,
-    ]),
+    ...data.flatMap((item) =>
+      [...visibleSeries].map((series) => item[series] || 0),
+    ),
   );
   const xStep =
     data.length > 1
@@ -469,62 +491,34 @@ function LineChart({ data }) {
             </g>
           );
         })}
-        <path
-          d={`${path("shifts")} L ${x(data.length - 1)} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`}
-          fill="url(#chartFill)"
-        />
-        <path
-          d={path("shifts")}
-          fill="none"
-          stroke="#2563eb"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d={path("completed")}
-          fill="none"
-          stroke="#16a34a"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d={path("late")}
-          fill="none"
-          stroke="#f97316"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d={path("leave")}
-          fill="none"
-          stroke="#dc2626"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d={path("missing")}
-          fill="none"
-          stroke="#111827"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {visibleSeries.has("shifts") && (
+          <>
+            <path
+              d={`${path("shifts")} L ${x(data.length - 1)} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`}
+              fill="url(#chartFill)"
+            />
+            <path d={path("shifts")} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+        {visibleSeries.has("completed") && (
+          <path d={path("completed")} fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {visibleSeries.has("late") && (
+          <path d={path("late")} fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {visibleSeries.has("leave") && (
+          <path d={path("leave")} fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {visibleSeries.has("missing") && (
+          <path d={path("missing")} fill="none" stroke="#111827" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
         {data.map((item, index) => (
           <g key={`${item.label}-${index}`}>
-            <circle cx={x(index)} cy={y(item.shifts)} r="4" fill="#2563eb" />
-            <circle
-              cx={x(index)}
-              cy={y(item.completed)}
-              r="3.5"
-              fill="#16a34a"
-            />
-            <circle cx={x(index)} cy={y(item.late)} r="3.5" fill="#f97316" />
-            <circle cx={x(index)} cy={y(item.leave)} r="3.5" fill="#dc2626" />
-            <circle cx={x(index)} cy={y(item.missing)} r="3.5" fill="#111827" />
+            {visibleSeries.has("shifts") && <circle cx={x(index)} cy={y(item.shifts)} r="4" fill="#2563eb" />}
+            {visibleSeries.has("completed") && <circle cx={x(index)} cy={y(item.completed)} r="3.5" fill="#16a34a" />}
+            {visibleSeries.has("late") && <circle cx={x(index)} cy={y(item.late)} r="3.5" fill="#f97316" />}
+            {visibleSeries.has("leave") && <circle cx={x(index)} cy={y(item.leave)} r="3.5" fill="#dc2626" />}
+            {visibleSeries.has("missing") && <circle cx={x(index)} cy={y(item.missing)} r="3.5" fill="#111827" />}
             <text
               x={x(index)}
               y={height - 18}
@@ -707,6 +701,9 @@ export default function Dashboard() {
   });
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [draftCards, setDraftCards] = useState(selectedCards);
+  const [visibleSeries, setVisibleSeries] = useState(
+    () => new Set(["shifts", "completed", "late", "leave", "missing"]),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -1059,48 +1056,62 @@ export default function Dashboard() {
     });
   };
 
+  const toggleSeries = (series) => {
+    setVisibleSeries((current) => {
+      const next = new Set(current);
+      if (next.has(series)) {
+        if (next.size > 1) next.delete(series);
+      } else {
+        next.add(series);
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Typography
-            variant="h4"
-            className="font-bold tracking-tight text-gray-950"
-          >
-            Tổng quan vận hành
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            Theo dõi nhân sự, năng suất ca làm và phân bổ vai trò trong một màn
-            hình.
-          </Typography>
+    <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-6 shadow-sm shadow-slate-900/5 sm:px-7 sm:py-7">
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-blue-600 via-sky-500 to-cyan-400" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-blue-50/80 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-[1.75rem] sm:leading-9">
+              Tổng quan vận hành
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">
+              Theo dõi nhân sự, năng suất ca làm và phân bổ vai trò trong một
+              màn hình.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outlined"
+              size="sm"
+              onClick={() => {
+                setDraftCards(selectedCards);
+                setCardModalOpen(true);
+              }}
+              className="flex h-10 items-center gap-2 rounded-lg border-slate-300 bg-white normal-case text-slate-700 shadow-none transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              <AdjustmentsHorizontalIcon className="h-4 w-4" />
+              Chọn thẻ hiển thị
+            </Button>
+            <Button
+              size="sm"
+              onClick={fetchDashboard}
+              disabled={loading}
+              aria-label="Làm mới dữ liệu"
+              title="Làm mới dữ liệu"
+              className="flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-500 px-4 normal-case text-white shadow-none transition hover:bg-blue-700 hover:shadow-none disabled:opacity-60"
+            >
+              <ArrowPathIcon
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+              <span>{loading ? "Đang cập nhật" : "Làm mới"}</span>
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outlined"
-            size="sm"
-            onClick={() => {
-              setDraftCards(selectedCards);
-              setCardModalOpen(true);
-            }}
-            className="flex items-center gap-2 rounded-md border-gray-300 normal-case text-gray-800"
-          >
-            <AdjustmentsHorizontalIcon className="h-4 w-4" />
-            Chọn thẻ
-          </Button>
-          <Button
-            size="sm"
-            onClick={fetchDashboard}
-            disabled={loading}
-            aria-label="Làm mới"
-            title="Làm mới"
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 bg-white p-0 text-gray-950 shadow-sm transition hover:border-gray-400 hover:bg-gray-50"
-          >
-            <ArrowPathIcon
-              className={`h-5 w-5 ${loading ? "animate-spin" : ""}`}
-            />
-          </Button>
-        </div>
-      </div>
+      </section>
 
       <DashboardErrorPopup
         message={error}
@@ -1108,14 +1119,14 @@ export default function Dashboard() {
         onRetry={fetchDashboard}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {selectedCards.slice(0, 4).map((key) => {
           const card = metricCards[key];
           const Icon = card.icon;
           return (
             <Card
               key={key}
-              className="overflow-hidden rounded-md border border-gray-200 bg-white p-5 shadow-sm"
+              className="group overflow-hidden rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/5 transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -1129,14 +1140,16 @@ export default function Dashboard() {
                     {card.detail}
                   </Typography>
                 </div>
-                <div className={`rounded-md p-3 ${toneClasses[card.tone]}`}>
+                <div
+                  className={`rounded-lg p-3 transition duration-200 group-hover:scale-105 ${toneClasses[card.tone]}`}
+                >
                   <Icon className="h-6 w-6" />
                 </div>
               </div>
             </Card>
           );
         })}
-      </div>
+      </section>
 
       <div className="grid gap-1.5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="rounded-md border border-gray-200 bg-white p-2 shadow-sm sm:p-5">
@@ -1146,6 +1159,9 @@ export default function Dashboard() {
               className="text-sm font-bold text-gray-950 sm:text-lg"
             >
               Năng suất nhân viên
+            </Typography>
+            <Typography className="mt-0.5 text-[10px] text-gray-500 sm:text-xs">
+              Chạm vào từng chỉ số để bật hoặc tắt đường trên biểu đồ.
             </Typography>
           </div>
 
@@ -1268,21 +1284,46 @@ export default function Dashboard() {
             <span className="rounded-md bg-gray-100 px-1 py-0.5 sm:px-3 sm:py-2">
               {selectedEmployeeLabel}
             </span>
-            <span className="rounded-md bg-blue-50 px-1 py-0.5 text-blue-700 sm:px-3 sm:py-2">
+            <button
+              type="button"
+              aria-pressed={visibleSeries.has("shifts")}
+              onClick={() => toggleSeries("shifts")}
+              className={`rounded-md bg-blue-50 px-1 py-0.5 text-blue-700 transition sm:px-3 sm:py-2 ${visibleSeries.has("shifts") ? "ring-1 ring-blue-200" : "opacity-40 grayscale"}`}
+            >
               Tổng số ca: {formatNumber(totals.totalShifts)}
-            </span>
-            <span className="rounded-md bg-orange-50 px-1 py-0.5 text-orange-700 sm:px-3 sm:py-2">
+            </button>
+            <button
+              type="button"
+              aria-pressed={visibleSeries.has("late")}
+              onClick={() => toggleSeries("late")}
+              className={`rounded-md bg-orange-50 px-1 py-0.5 text-orange-700 transition sm:px-3 sm:py-2 ${visibleSeries.has("late") ? "ring-1 ring-orange-200" : "opacity-40 grayscale"}`}
+            >
               Số lần trễ: {formatNumber(totals.lateCount)}
-            </span>
-            <span className="rounded-md bg-red-50 px-1 py-0.5 text-red-700 ring-1 ring-inset ring-red-100 sm:px-3 sm:py-2">
+            </button>
+            <button
+              type="button"
+              aria-pressed={visibleSeries.has("leave")}
+              onClick={() => toggleSeries("leave")}
+              className={`rounded-md bg-red-50 px-1 py-0.5 text-red-700 transition sm:px-3 sm:py-2 ${visibleSeries.has("leave") ? "ring-1 ring-red-200" : "opacity-40 grayscale"}`}
+            >
               Nghỉ phép: {formatNumber(totals.leaveToday)}
-            </span>
-            <span className="rounded-md bg-green-50 px-1 py-0.5 text-green-700 sm:px-3 sm:py-2">
+            </button>
+            <button
+              type="button"
+              aria-pressed={visibleSeries.has("completed")}
+              onClick={() => toggleSeries("completed")}
+              className={`rounded-md bg-green-50 px-1 py-0.5 text-green-700 transition sm:px-3 sm:py-2 ${visibleSeries.has("completed") ? "ring-1 ring-green-200" : "opacity-40 grayscale"}`}
+            >
               Ca đã làm: {formatNumber(totals.completedCount)}
-            </span>
-            <span className="rounded-md bg-black px-1 py-0.5 text-white sm:px-3 sm:py-2">
+            </button>
+            <button
+              type="button"
+              aria-pressed={visibleSeries.has("missing")}
+              onClick={() => toggleSeries("missing")}
+              className={`rounded-md bg-black px-1 py-0.5 text-white transition sm:px-3 sm:py-2 ${visibleSeries.has("missing") ? "ring-1 ring-slate-400" : "opacity-35"}`}
+            >
               Chưa chấm công: {formatNumber(totals.missingCount)}
-            </span>
+            </button>
             <span className="rounded-md bg-blue-50 px-1 py-0.5 text-blue-700 sm:px-3 sm:py-2">
               Chưa làm: {formatNumber(totals.upcomingCount)}
             </span>
@@ -1294,28 +1335,28 @@ export default function Dashboard() {
                 <Spinner className="h-6 w-6 text-blue-600 sm:h-8 sm:w-8" />
               </div>
             ) : (
-              <LineChart data={trendData} />
+              <LineChart data={trendData} visibleSeries={visibleSeries} />
             )}
           </div>
 
           <div className="mt-1 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[9px] font-semibold text-gray-500 sm:mt-3 sm:gap-4 sm:text-xs">
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center gap-2 ${visibleSeries.has("shifts") ? "" : "opacity-35"}`}>
               <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
               Tổng ca
             </span>
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center gap-2 ${visibleSeries.has("completed") ? "" : "opacity-35"}`}>
               <span className="h-2.5 w-2.5 rounded-full bg-green-600" />
               Ca đã làm
             </span>
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center gap-2 ${visibleSeries.has("late") ? "" : "opacity-35"}`}>
               <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
               Đi trễ
             </span>
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center gap-2 ${visibleSeries.has("leave") ? "" : "opacity-35"}`}>
               <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
               Nghỉ phép
             </span>
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center gap-2 ${visibleSeries.has("missing") ? "" : "opacity-35"}`}>
               <span className="h-2.5 w-2.5 rounded-full bg-black" />
               Chưa chấm công
             </span>
@@ -1370,28 +1411,33 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <Card className="rounded-md border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+        <Card className="overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5 sm:p-5">
           <div className="flex items-center justify-between">
             <div>
               <Typography variant="h6" className="font-bold text-gray-950">
                 Sinh nhật sắp tới
               </Typography>
               <Typography className="text-sm text-gray-500">
-                Ưu tiên các ngày gần nhất.
+                Nhân viên có sinh nhật trong 40 ngày tới.
               </Typography>
             </div>
-            <CalendarDaysIcon className="h-6 w-6 text-blue-600" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+              <CakeIcon className="h-6 w-6" />
+            </div>
           </div>
           <div className="mt-5 space-y-3">
             {birthdays.length === 0 ? (
-              <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-medium text-gray-500">
-                Chưa có dữ liệu sinh nhật trong hồ sơ nhân viên
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-[0px] font-medium text-slate-500">
+                <CakeIcon className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                <span className="block text-sm">
+                  {"Không có sinh nhật trong 40 ngày tới"}
+                </span>
               </div>
             ) : (
               birthdays.map((employee) => (
                 <div
                   key={employee.employee_id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 px-3 py-3"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-3 transition hover:border-blue-100 hover:bg-blue-50/60"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-gray-950">
@@ -1401,7 +1447,13 @@ export default function Dashboard() {
                       {formatBirthday(employee.birthday)}
                     </div>
                   </div>
-                  <span className="rounded-md bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
+                  <span
+                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold ${
+                      employee.daysLeft === 0
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-blue-100 text-blue-700"
+                    }`}
+                  >
                     {employee.daysLeft === 0
                       ? "Hôm nay"
                       : `${employee.daysLeft} ngày`}
@@ -1412,7 +1464,7 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <Card className="rounded-md border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+        <Card className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5 sm:p-5">
           <div className="mb-5">
             <Typography variant="h6" className="font-bold text-gray-950">
               Phân bổ vai trò nhân viên

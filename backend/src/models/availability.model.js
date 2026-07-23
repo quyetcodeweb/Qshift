@@ -358,16 +358,13 @@ export const createFillRequests = async (month, year, employeeId = null) => {
     params
   );
 
-  const requests = [];
+  const createdRequests = [];
+  let existingCount = 0;
 
   for (const employee of employees) {
-    const existing = await findPendingFillRequest(employee.user_id, month, year);
+    const existing = await findLatestRequest(employee.user_id, month, year);
     if (existing) {
-      requests.push({
-        request_id: existing.id,
-        user_id: employee.user_id,
-        employee_id: employee.employee_id,
-      });
+      existingCount += 1;
       continue;
     }
 
@@ -392,14 +389,14 @@ export const createFillRequests = async (month, year, employeeId = null) => {
       ]
     );
 
-    requests.push({
+    createdRequests.push({
       request_id: result.insertId,
       user_id: employee.user_id,
       employee_id: employee.employee_id,
     });
   }
 
-  return requests;
+  return { createdRequests, existingCount, totalEmployees: employees.length };
 };
 
 export const getEmployeeByUserId = async (user_id) => {

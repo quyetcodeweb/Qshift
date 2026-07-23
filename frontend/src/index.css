@@ -202,6 +202,21 @@ table {
   animation: aiTyping 1.15s ease-in-out infinite;
 }
 
+@keyframes requestSelectionIn {
+  from {
+    transform: scale(0.992);
+    background-color: rgb(255 255 255);
+  }
+  to {
+    transform: scale(1);
+    background-color: rgb(254 242 242);
+  }
+}
+
+.request-selection-enter {
+  animation: requestSelectionIn 180ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ai-panel-enter,
   .ai-message-enter,
@@ -210,6 +225,7 @@ table {
   .ai-shimmer::after,
   .ai-typing-dot,
   .ai-busy-bubble::after,
+  .request-selection-enter,
   [class*="profileModalIn"] {
     animation: none !important;
   }

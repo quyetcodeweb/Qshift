@@ -37,16 +37,6 @@ function getStoredUser() {
   }
 }
 
-function initials(name = "") {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "QS";
-  return parts
-    .slice(-2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
 function toDateInput(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -189,6 +179,7 @@ export default function ProfilePage() {
   const [emailPrefs, setEmailPrefs] = useState({});
   const [savingEmailPrefs, setSavingEmailPrefs] = useState(false);
   const [showEmailPrefs, setShowEmailPrefs] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -499,6 +490,7 @@ export default function ProfilePage() {
         title: "Đã đổi mật khẩu",
         message: "Mật khẩu tài khoản đã được cập nhật.",
       });
+      setShowPasswordDialog(false);
     } catch (err) {
       const message =
         err.response?.data?.message ||
@@ -524,8 +516,8 @@ export default function ProfilePage() {
   return (
     <>
       <div className="mx-auto min-h-screen max-w-7xl space-y-5 px-2 pb-8 sm:px-0">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="relative bg-[linear-gradient(135deg,#0f172a_0%,#134e4a_48%,#f59e0b_100%)] px-4 py-6 text-white sm:px-6 sm:py-8 lg:px-8">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
+          <div className="relative bg-[linear-gradient(135deg,#052e2b_0%,#065f46_55%,#15803d_100%)] px-4 py-6 text-white sm:px-6 sm:py-8 lg:px-8">
             <div className="absolute inset-x-0 bottom-0 h-16 bg-white [clip-path:polygon(0_100%,100%_36%,100%_100%)]" />
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
@@ -543,8 +535,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={savingAvatar}
-                    className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-2xl text-slate-950 shadow-lg ring-1 ring-white/70 transition hover:scale-105 hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
-                    style={{ backgroundColor: "#67e8f9" }}
+                    className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-xl !bg-gray-200 !text-black shadow-lg ring-1 ring-emerald-100 transition hover:scale-105 hover:!bg-emerald-50 disabled:cursor-wait disabled:opacity-70"
                     aria-label="Chọn ảnh hồ sơ"
                   >
                     {savingAvatar ? (
@@ -600,7 +591,7 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setShowEmailPrefs(true)}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-yellow-400 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:brightness-105"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl !bg-yellow-500 px-4 text-sm font-bold !text-black shadow-sm transition hover:!bg-green-50"
                 >
                   <EnvelopeIcon className="h-5 w-5" />
                   Email
@@ -625,8 +616,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={saveProfile}
                       disabled={saving}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black text-slate-950 transition hover:brightness-105 disabled:opacity-60"
-                      style={{ backgroundColor: "#67e8f9" }}
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-green-800 transition hover:bg-green-50 disabled:opacity-60"
                     >
                       <CheckCircleIcon className="h-5 w-5" />
                       {saving ? "Đang lưu" : "Lưu hồ sơ"}
@@ -636,8 +626,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white shadow-lg shadow-cyan-950/20 transition hover:brightness-105"
-                    style={{ backgroundColor: "#0891b2" }}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl !bg-green-600 px-4 text-sm font-bold !text-white shadow-sm transition hover:!bg-green-700"
                   >
                     <PencilSquareIcon className="h-5 w-5" />
                     Sửa thông tin
@@ -895,8 +884,29 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordDialog(true)}
+                  className="group flex w-full items-center justify-between rounded-2xl border border-green-200 bg-green-50 p-4 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100/70"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-600 text-white shadow-sm">
+                      <LockClosedIcon className="h-5 w-5" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-black text-green-500">
+                        Đổi mật khẩu
+                      </span>
+                      <span className="mt-0.5 block text-xs font-semibold text-green-700">
+                        Mở cửa sổ bảo mật
+                      </span>
+                    </span>
+                  </span>
+                  <KeyIcon className="h-5 w-5 text-green-700 transition group-hover:translate-x-0.5" />
+                </button>
+
                 <div
-                  className="rounded-2xl border p-5 text-white shadow-sm"
+                  className="hidden rounded-2xl border p-5 text-white shadow-sm"
                   style={{ backgroundColor: "#0f172a", borderColor: "#334155" }}
                 >
                   <div className="mb-4 flex items-center gap-3">
@@ -1049,7 +1059,7 @@ export default function ProfilePage() {
           <div className="w-full max-w-lg animate-[profileModalIn_180ms_ease-out] overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                   <EnvelopeIcon className="h-5 w-5" />
                 </div>
                 <div>
@@ -1081,7 +1091,7 @@ export default function ProfilePage() {
                 {emailNotificationOptions.map((item) => (
                   <label
                     key={item.key}
-                    className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:border-cyan-200 hover:bg-cyan-50/50"
+                    className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:border-emerald-200 hover:bg-emerald-50/50"
                   >
                     <span className="text-sm font-bold text-slate-700">
                       {item.label}
@@ -1091,11 +1101,148 @@ export default function ProfilePage() {
                       checked={Boolean(emailPrefs[item.key])}
                       disabled={savingEmailPrefs || !profile?.email}
                       onChange={() => toggleEmailPref(item.key)}
-                      className="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 disabled:opacity-50"
+                      className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
                     />
                   </label>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPasswordDialog && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 px-0 py-0 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6">
+          <div className="w-full animate-[profileModalIn_180ms_ease-out] overflow-hidden rounded-t-2xl border border-white/70 bg-white shadow-2xl sm:max-w-lg sm:rounded-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <LockClosedIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-950">
+                    Đổi mật khẩu
+                  </h2>
+                  <p className="text-sm font-medium text-slate-500">
+                    Xác minh email để bảo vệ tài khoản.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordDialog(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                aria-label="Đóng đổi mật khẩu"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-5">
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Mật khẩu hiện tại
+                </span>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(event) =>
+                    setPasswordForm((prev) => ({
+                      ...prev,
+                      currentPassword: event.target.value,
+                    }))
+                  }
+                  autoComplete="current-password"
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
+                />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Mật khẩu mới
+                  </span>
+                  <input
+                    type="password"
+                    value={passwordForm.password}
+                    onChange={(event) =>
+                      setPasswordForm((prev) => ({
+                        ...prev,
+                        password: event.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
+                    placeholder="Tối thiểu 6 ký tự"
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Xác nhận mật khẩu
+                  </span>
+                  <input
+                    type="password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(event) =>
+                      setPasswordForm((prev) => ({
+                        ...prev,
+                        confirmPassword: event.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Mã OTP email
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    value={passwordForm.otp}
+                    onChange={(event) =>
+                      setPasswordForm((prev) => ({
+                        ...prev,
+                        otp: event.target.value,
+                      }))
+                    }
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    placeholder="Nhập mã gồm 6 số"
+                    className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => requestEmailOtp("password_change")}
+                    disabled={sendingPasswordOtp}
+                    className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    {sendingPasswordOtp ? (
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <EnvelopeIcon className="h-4 w-4" />
+                    )}
+                    Gửi mã
+                  </button>
+                </div>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setShowPasswordDialog(false)}
+                className="h-11 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={changePassword}
+                disabled={savingPassword}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+              >
+                <LockClosedIcon className="h-4 w-4" />
+                {savingPassword ? "Đang đổi..." : "Đổi mật khẩu"}
+              </button>
             </div>
           </div>
         </div>

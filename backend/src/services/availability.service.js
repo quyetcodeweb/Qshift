@@ -58,9 +58,10 @@ export const requestAvailability = async (user_id, month, year, data) => {
 };
 
 export const sendFillRequestToEmployees = async (month, year, employeeId = null) => {
-  const requests = await model.createFillRequests(month, year, employeeId);
+  const { createdRequests, existingCount, totalEmployees } =
+    await model.createFillRequests(month, year, employeeId);
 
-  for (const request of requests) {
+  for (const request of createdRequests) {
     await model.deleteNotificationsByType(request.request_id, ["AVAILABILITY_FILL_REQUEST"]);
     await model.createNotification(
       request.user_id,
@@ -75,14 +76,18 @@ export const sendFillRequestToEmployees = async (month, year, employeeId = null)
     for (const admin of admins) {
       await model.createNotification(
         admin.user_id,
-        `Đã gửi yêu cầu điền lịch rảnh tháng ${month}/${year} cho ${requests.length} nhân viên`,
+        `Đã gửi yêu cầu điền lịch rảnh tháng ${month}/${year} cho ${createdRequests.length} nhân viên`,
         "AVAILABILITY_FILL_REQUEST_SENT",
         null
       );
     }
   }
 
-  return requests.length;
+  return {
+    count: createdRequests.length,
+    existingCount,
+    totalEmployees,
+  };
 };
 
 export const getMyAvailabilityRequest = async (user_id, month, year) => {
