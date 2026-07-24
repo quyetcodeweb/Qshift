@@ -7,6 +7,7 @@ import {
   ArrowsRightLeftIcon,
   CalendarDaysIcon,
   ClockIcon,
+  DocumentArrowDownIcon,
   PaperAirplaneIcon,
   PlusCircleIcon,
   UserIcon,
@@ -14,6 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { getRole } from "../utils/auth";
 import { API_URL } from "../services/api";
+import ScheduleExportModal from "../components/ScheduleExportModal";
 
 const statusText = {
   PENDING_TARGET: "Chờ người nhận xác nhận",
@@ -757,6 +759,7 @@ export default function ShiftsCalendar() {
   const [swapCandidate, setSwapCandidate] = useState(null);
   const [selectedSwapTarget, setSelectedSwapTarget] = useState(null);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [supplementalModalOpen, setSupplementalModalOpen] = useState(false);
   const [noteForm, setNoteForm] = useState({
     title: "",
@@ -838,7 +841,7 @@ export default function ShiftsCalendar() {
     } finally {
       setLoading(false);
     }
-  }, [cursorDate, range]);
+  }, [range]);
 
   useEffect(() => {
     fetchSchedules();
@@ -909,6 +912,19 @@ export default function ShiftsCalendar() {
       })
       .sort((a, b) => scheduleStart(a) - scheduleStart(b));
   }, [range, schedules]);
+
+  const exportDefaultRange = useMemo(() => {
+    if (viewMode !== "month") return range;
+
+    return {
+      startDate: dateKey(
+        new Date(cursorDate.getFullYear(), cursorDate.getMonth(), 1),
+      ),
+      endDate: dateKey(
+        new Date(cursorDate.getFullYear(), cursorDate.getMonth() + 1, 0),
+      ),
+    };
+  }, [cursorDate, range, viewMode]);
 
   const movePeriod = (direction) => {
     if (viewMode === "month") {
@@ -1189,6 +1205,16 @@ export default function ShiftsCalendar() {
             {role === "ADMIN" && (
               <button
                 type="button"
+                onClick={() => setExportModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-green-700 active:scale-[0.98]"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5" />
+                Xuất Excel
+              </button>
+            )}
+            {role === "ADMIN" && (
+              <button
+                type="button"
                 onClick={openSupplementalModal}
                 className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700"
               >
@@ -1413,6 +1439,12 @@ export default function ShiftsCalendar() {
           )}
         </div>
       )}
+
+      <ScheduleExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        initialRange={exportDefaultRange}
+      />
 
       {supplementalModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/30 p-3 backdrop-blur-sm sm:items-center">

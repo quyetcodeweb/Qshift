@@ -6,6 +6,10 @@ import {
   getDraftSchedules,
   deleteDraftSchedule,
 } from "../services/schedule.service.js";
+import {
+  buildScheduleExportPreview,
+  createScheduleExportWorkbook,
+} from "../services/scheduleExport.service.js";
 import { sendUserEmail } from "../services/emailNotification.service.js";
 
 async function ensureDraftTables() {
@@ -506,6 +510,39 @@ export async function publishSchedule(req, res) {
     });
   } catch (error) {
     console.error("[publishSchedule] Error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+}
+
+export async function getScheduleExportPreview(req, res) {
+  try {
+    const preview = await buildScheduleExportPreview(req.body || {});
+    res.json(preview);
+  } catch (error) {
+    console.error("[getScheduleExportPreview] Error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+}
+
+export async function exportScheduleWorkbook(req, res) {
+  try {
+    const preview = await buildScheduleExportPreview(req.body || {});
+    const workbook = await createScheduleExportWorkbook(preview);
+    const startDate = preview.startDate || "schedule";
+    const endDate = preview.endDate || startDate;
+    const fileName = `bang-phan-cong_${startDate}_den_${endDate}.xlsx`;
+
+    res
+      .status(200)
+      .set({
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Length": String(workbook.length),
+        "Cache-Control": "no-store",
+      })
+      .send(workbook);
+  } catch (error) {
+    console.error("[exportScheduleWorkbook] Error:", error);
     res.status(error.statusCode || 500).json({ message: error.message });
   }
 }

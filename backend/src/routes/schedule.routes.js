@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { verifyAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 import {
   autoGenerate,
   saveDraft,
@@ -25,6 +25,8 @@ import {
   deleteSingleSchedule,
   getScheduleSettings,
   saveScheduleSettings,
+  getScheduleExportPreview,
+  exportScheduleWorkbook,
 } from "../controllers/schedule.controller.js";
 
 const router = express.Router();
@@ -32,6 +34,10 @@ const router = express.Router();
 // Settings routes (specific routes first)
 router.get("/settings", verifyToken, getScheduleSettings);
 router.post("/settings", verifyToken, saveScheduleSettings);
+
+// Excel export routes (admin only)
+router.post("/export/preview", verifyToken, verifyAdmin, getScheduleExportPreview);
+router.post("/export", verifyToken, verifyAdmin, exportScheduleWorkbook);
 
 // Draft management routes (more specific routes before generic)
 router.get("/drafts/list", verifyToken, getDraftsList);
