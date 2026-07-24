@@ -170,9 +170,9 @@ export const remindAvailabilityRequest = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await service.remindAvailabilityRequest(id);
+    const result = await service.remindAvailabilityRequest(id);
 
-    res.json({ message: "Reminder sent" });
+    res.json({ message: "Reminder sent", ...result });
   } catch (err) {
     console.error("Remind availability request error:", err.message);
     res.status(500).json({ message: err.message });

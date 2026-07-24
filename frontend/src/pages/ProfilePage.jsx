@@ -3,10 +3,12 @@ import axios from "axios";
 import { Spinner } from "@material-tailwind/react";
 import {
   ArrowPathIcon,
+  BellAlertIcon,
   BriefcaseIcon,
   CalendarDaysIcon,
   CameraIcon,
   CheckCircleIcon,
+  ClockIcon,
   EnvelopeIcon,
   IdentificationIcon,
   KeyIcon,
@@ -125,16 +127,32 @@ function TextInput({ label, icon, className = "", ...props }) {
 }
 
 const emailNotificationOptions = [
-  { key: "schedule", label: "Lịch làm việc" },
-  { key: "attendance", label: "Chấm công" },
-  { key: "attendance_reminder", label: "Nhắc chấm công" },
-  { key: "bell", label: "Thông báo trong chuông" },
-  { key: "shift_swap", label: "Yêu cầu đổi ca" },
-  { key: "admin_reminder", label: "Nhắc nhở của admin" },
-  { key: "payroll", label: "Lương và phản hồi" },
-  { key: "availability", label: "Đăng ký ngày nghỉ" },
-  { key: "security", label: "Bảo mật tài khoản" },
+  { key: "schedule", label: "Lịch làm việc", description: "Ca mới, cập nhật lịch và thay đổi ca được công bố.", icon: CalendarDaysIcon, group: "Vận hành" },
+  { key: "attendance", label: "Chấm công", description: "Kết quả check-in, check-out và các thay đổi liên quan.", icon: CheckCircleIcon, group: "Vận hành" },
+  { key: "attendance_reminder", label: "Nhắc chấm công", description: "Nhắc vào/ra ca và các mốc chấm công cần lưu ý.", icon: ClockIcon, group: "Vận hành" },
+  { key: "shift_swap", label: "Yêu cầu đổi ca", description: "Yêu cầu đổi ca, xác nhận và kết quả xử lý.", icon: ArrowPathIcon, group: "Vận hành" },
+  { key: "availability", label: "Đăng ký lịch rảnh", description: "Yêu cầu đăng ký hoặc nhắc hoàn tất lịch rảnh.", icon: CalendarDaysIcon, group: "Vận hành" },
+  { key: "payroll", label: "Lương và phản hồi", description: "Khoản thưởng/phạt, bảng lương và phản hồi lương.", icon: BriefcaseIcon, group: "Cá nhân" },
+  { key: "admin_reminder", label: "Nhắc nhở từ admin", description: "Ghi chú hoặc nhắc việc do quản lý gửi riêng.", icon: BellAlertIcon, group: "Cá nhân" },
+  { key: "bell", label: "Thông báo chung", description: "Các thông báo hệ thống không thuộc nhóm chuyên biệt.", icon: BellAlertIcon, group: "Cá nhân" },
+  { key: "security", label: "Bảo mật tài khoản", description: "Cảnh báo đăng nhập và hoạt động bảo mật của tài khoản.", icon: ShieldCheckIcon, group: "Bảo mật" },
 ];
+
+function EmailPreferenceRow({ item, checked, disabled, onChange }) {
+  const Icon = item.icon;
+  return (
+    <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked ? "border-blue-200 bg-blue-50/60" : "border-gray-200 bg-white hover:border-gray-300"} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${checked ? "bg-blue-700 text-white" : "bg-gray-100 text-gray-600"}`}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-gray-900">{item.label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-gray-500">{item.description}</span>
+      </span>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} className="h-5 w-5 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+    </label>
+  );
+}
 
 function SelectInput({ label, icon, className = "", children, ...props }) {
   const IconComponent = icon;
@@ -178,6 +196,7 @@ export default function ProfilePage() {
   const [sendingPasswordOtp, setSendingPasswordOtp] = useState(false);
   const [emailPrefs, setEmailPrefs] = useState({});
   const [savingEmailPrefs, setSavingEmailPrefs] = useState(false);
+  const [emailPrefsDirty, setEmailPrefsDirty] = useState(false);
   const [showEmailPrefs, setShowEmailPrefs] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -233,6 +252,7 @@ export default function ProfilePage() {
       setProfileForm(profileResult.value.data);
       if (prefsResult.status === "fulfilled") {
         setEmailPrefs(prefsResult.value.data || {});
+        setEmailPrefsDirty(false);
       }
     } catch (err) {
       setError(
@@ -294,6 +314,7 @@ export default function ProfilePage() {
         { headers: authHeaders() },
       );
       setEmailPrefs(res.data || nextPrefs);
+      setEmailPrefsDirty(false);
     } catch (err) {
       notifyProfileError(
         err.response?.data?.message || "Không thể lưu thiết lập email",
@@ -307,8 +328,23 @@ export default function ProfilePage() {
   const toggleEmailPref = (key) => {
     const next = { ...emailPrefs, [key]: !emailPrefs[key] };
     setEmailPrefs(next);
-    saveEmailPreferences(next);
+    setEmailPrefsDirty(true);
   };
+
+  const setAllEmailPrefs = (enabled) => {
+    setEmailPrefs(
+      emailNotificationOptions.reduce((prefs, item) => ({ ...prefs, [item.key]: enabled }), {}),
+    );
+    setEmailPrefsDirty(true);
+  };
+
+  const emailPreferenceGroups = useMemo(
+    () => ["Vận hành", "Cá nhân", "Bảo mật"].map((group) => ({
+      group,
+      items: emailNotificationOptions.filter((item) => item.group === group),
+    })),
+    [],
+  );
 
   const employeePayload = useCallback(
     (source, overrides = {}) => ({
@@ -591,10 +627,10 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setShowEmailPrefs(true)}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl !bg-yellow-500 px-4 text-sm font-bold !text-black shadow-sm transition hover:!bg-green-50"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-white/15 px-4 text-sm font-bold text-white ring-1 ring-white/25 transition hover:bg-white/25"
                 >
                   <EnvelopeIcon className="h-5 w-5" />
-                  Email
+                  Thông báo email
                 </button>
                 {editing ? (
                   <>
@@ -1082,30 +1118,30 @@ export default function ProfilePage() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-900">
+                Chỉ những nhóm được bật mới nhận email. Thông báo bên trong Qshift vẫn hiển thị bình thường để bạn không bỏ lỡ công việc.
+              </div>
               {!profile?.email && (
-                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-                  Cập nhật email để nhận thông báo.
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                  Hãy cập nhật email trong hồ sơ trước khi bật nhận thông báo.
                 </div>
               )}
-              <div className="space-y-2">
-                {emailNotificationOptions.map((item) => (
-                  <label
-                    key={item.key}
-                    className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:border-emerald-200 hover:bg-emerald-50/50"
-                  >
-                    <span className="text-sm font-bold text-slate-700">
-                      {item.label}
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(emailPrefs[item.key])}
-                      disabled={savingEmailPrefs || !profile?.email}
-                      onChange={() => toggleEmailPref(item.key)}
-                      className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
-                    />
-                  </label>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs font-bold text-gray-500">{emailNotificationOptions.filter((item) => emailPrefs[item.key]).length}/{emailNotificationOptions.length} nhóm đang bật</span>
+                <div className="flex gap-2"><button type="button" disabled={savingEmailPrefs || !profile?.email} onClick={() => setAllEmailPrefs(true)} className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-50 disabled:opacity-50">Bật tất cả</button><button type="button" disabled={savingEmailPrefs || !profile?.email} onClick={() => setAllEmailPrefs(false)} className="rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-600 transition hover:bg-gray-100 disabled:opacity-50">Tắt tất cả</button></div>
+              </div>
+              <div className="mt-4 space-y-5">
+                {emailPreferenceGroups.map(({ group, items }) => (
+                  <section key={group}>
+                    <h3 className="mb-2 text-xs font-extrabold uppercase tracking-[0.12em] text-gray-500">{group}</h3>
+                    <div className="space-y-2">{items.map((item) => <EmailPreferenceRow key={item.key} item={item} checked={Boolean(emailPrefs[item.key])} disabled={savingEmailPrefs || !profile?.email} onChange={() => toggleEmailPref(item.key)} />)}</div>
+                  </section>
                 ))}
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-5 py-4">
+              <span className="text-xs font-medium text-gray-500">{emailPrefsDirty ? "Bạn có thay đổi chưa lưu" : "Thiết lập đã được lưu"}</span>
+              <button type="button" onClick={() => saveEmailPreferences()} disabled={!emailPrefsDirty || savingEmailPrefs || !profile?.email} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"><CheckCircleIcon className="h-4 w-4" />{savingEmailPrefs ? "Đang lưu..." : "Lưu lựa chọn"}</button>
             </div>
           </div>
         </div>

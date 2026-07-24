@@ -427,10 +427,12 @@ export default function AvailabilityPage() {
       );
       const sentCount = Number(res.data.count || 0);
       const existingCount = Number(res.data.existingCount || 0);
+      const emailSent = Number(res.data.emailSent || 0);
+      const emailSkipped = Number(res.data.emailSkipped || 0);
       const message = sentCount
         ? target === "selected"
-          ? `Đã gửi yêu cầu cho ${selectedEmployee?.name || "nhân viên đã chọn"}.`
-          : `Đã gửi yêu cầu cho ${sentCount} nhân viên.`
+          ? `Đã tạo yêu cầu cho ${selectedEmployee?.name || "nhân viên đã chọn"}.`
+          : `Đã tạo yêu cầu cho ${sentCount} nhân viên.`
         : target === "selected"
           ? "Nhân viên này đã có yêu cầu cho tháng đang chọn."
           : "Tất cả nhân viên đã có yêu cầu cho tháng đang chọn.";
@@ -438,9 +440,12 @@ export default function AvailabilityPage() {
       window.appPopup?.({
         type: sentCount ? "success" : "info",
         title: sentCount ? "Đã gửi yêu cầu" : "Không tạo yêu cầu mới",
-        message: existingCount && sentCount
-          ? `${message} Đã bỏ qua ${existingCount} yêu cầu đã tồn tại.`
-          : message,
+        message: [
+          message,
+          existingCount ? `Đã bỏ qua ${existingCount} yêu cầu đang chờ nhân viên lưu lịch.` : "",
+          sentCount && emailSent ? `Đã gửi email cho ${emailSent} nhân viên.` : "",
+          sentCount && emailSkipped ? `${emailSkipped} email chưa gửi được; nhân viên vẫn nhận thông báo trong Qshift. Kiểm tra email hồ sơ, tùy chọn nhận email và cấu hình SMTP.` : "",
+        ].filter(Boolean).join(" "),
       });
       window.dispatchEvent(new Event("notification-count-changed"));
     } catch (err) {

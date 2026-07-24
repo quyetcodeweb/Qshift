@@ -35,10 +35,13 @@ function smtpReady() {
 function getTransporter() {
   if (!smtpReady()) return null;
   if (!transporter) {
+    const port = Number(process.env.SMTP_PORT || 587);
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: String(process.env.SMTP_SECURE || "false") === "true",
+      port,
+      secure: process.env.SMTP_SECURE === undefined
+        ? port === 465
+        : String(process.env.SMTP_SECURE) === "true",
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -154,8 +157,10 @@ export async function sendEmployeeEmail(employeeId, type, { subject, text, html 
   if (!EMAIL_TYPES.includes(type)) return { sent: false, reason: "unknown_type" };
   await ensureEmailTables();
   const [rows] = await database.query(
-    `SELECT e.email, p.${type} AS enabled
+    `SELECT COALESCE(NULLIF(e.email, ''), NULLIF(u.username, '')) AS email,
+            p.${type} AS enabled
      FROM employees e
+     LEFT JOIN users u ON u.user_id = e.user_id
      LEFT JOIN employee_email_preferences p ON p.employee_id = e.employee_id
      WHERE e.employee_id = ?
      LIMIT 1`,
@@ -198,13 +203,18 @@ export async function createAndSendOtp({ userId, employeeId, purpose, targetEmai
     [userId, employeeId || null, purpose, targetEmail, hashOtp(code), expires],
   );
 
-  const sent = await sendEmail({
-    to: targetEmail,
+  const payload = {
     subject: "Mã xác minh Qshift",
     text: `Mã xác minh của bạn là ${code}. Mã có hiệu lực trong 10 phút.`,
-  });
+  };
+  const sent = employeeId
+    ? await sendEmployeeEmail(employeeId, "security", payload)
+    : await sendEmail({ to: targetEmail, ...payload });
   if (!sent.sent) {
-    const error = new Error("Chưa cấu hình email gửi mã OTP");
+    const reasonMessage = sent.reason === "disabled"
+      ? "Bạn đã tắt email bảo mật trong cài đặt thông báo"
+      : "Không thể gửi email xác minh. Kiểm tra email hồ sơ hoặc cấu hình SMTP";
+    const error = new Error(reasonMessage);
     error.statusCode = 500;
     throw error;
   }

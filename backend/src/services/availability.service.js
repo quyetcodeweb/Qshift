@@ -1,5 +1,6 @@
 import * as model from "../models/availability.model.js";
 import db from "../config/db.js";
+import { sendUserEmail } from "./emailNotification.service.js";
 
 export const save = async (data) => {
   return await model.save(data);
@@ -61,15 +62,36 @@ export const sendFillRequestToEmployees = async (month, year, employeeId = null)
   const { createdRequests, existingCount, totalEmployees } =
     await model.createFillRequests(month, year, employeeId);
 
-  for (const request of createdRequests) {
-    await model.deleteNotificationsByType(request.request_id, ["AVAILABILITY_FILL_REQUEST"]);
-    await model.createNotification(
-      request.user_id,
-      `Hãy điền lịch rảnh vào tháng ${month}/${year}`,
-      "AVAILABILITY_FILL_REQUEST",
-      request.request_id
-    );
-  }
+  const emailResults = await Promise.all(
+    createdRequests.map(async (request) => {
+      await model.deleteNotificationsByType(request.request_id, ["AVAILABILITY_FILL_REQUEST"]);
+      await model.createNotification(
+        request.user_id,
+        `Hãy điền lịch rảnh vào tháng ${month}/${year}`,
+        "AVAILABILITY_FILL_REQUEST",
+        request.request_id
+      );
+
+      try {
+        const delivery = await sendUserEmail(request.user_id, "availability", {
+          subject: `Qshift: yêu cầu đăng ký lịch rảnh tháng ${month}/${year}`,
+          text: `Admin đã gửi yêu cầu đăng ký lịch rảnh tháng ${month}/${year}. Vui lòng đăng nhập Qshift và lưu lịch rảnh của bạn.`,
+        });
+        return delivery;
+      } catch (error) {
+        console.warn("[availability] Email request failed:", error.message);
+        return { sent: false, reason: "delivery_failed" };
+      }
+    }),
+  );
+
+  /*
+   * The in-app notification and email are deliberately independent: an SMTP
+   * configuration issue must not prevent employees from receiving the request
+   * inside Qshift.
+   */
+  const emailSent = emailResults.filter((result) => result?.sent).length;
+  const emailSkipped = emailResults.length - emailSent;
 
   if (!employeeId) {
     const admins = await model.getAdmins();
@@ -87,6 +109,8 @@ export const sendFillRequestToEmployees = async (month, year, employeeId = null)
     count: createdRequests.length,
     existingCount,
     totalEmployees,
+    emailSent,
+    emailSkipped,
   };
 };
 
@@ -187,6 +211,19 @@ export const remindAvailabilityRequest = async (id) => {
     "AVAILABILITY_FILL_REMINDER",
     id
   );
+
+  let email = { sent: false, reason: "not_attempted" };
+  try {
+    email = await sendUserEmail(request.user_id, "availability", {
+      subject: `Qshift: nhắc đăng ký lịch rảnh tháng ${request.month}/${request.year}`,
+      text: `Bạn vẫn chưa lưu lịch rảnh tháng ${request.month}/${request.year}. Vui lòng đăng nhập Qshift để hoàn tất.`,
+    });
+  } catch (error) {
+    console.warn("[availability] Reminder email failed:", error.message);
+    email = { sent: false, reason: "delivery_failed" };
+  }
+
+  return { email };
 };
 
 export const deleteAvailabilityRequest = async (id) => {

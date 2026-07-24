@@ -362,7 +362,10 @@ export const createFillRequests = async (month, year, employeeId = null) => {
   let existingCount = 0;
 
   for (const employee of employees) {
-    const existing = await findLatestRequest(employee.user_id, month, year);
+    // Only a PENDING request means the employee has not saved their availability yet.
+    // A submitted/approved/rejected request belongs to an earlier completed round and
+    // must not prevent the admin from starting a new one for the same month.
+    const existing = await findPendingFillRequest(employee.user_id, month, year);
     if (existing) {
       existingCount += 1;
       continue;
