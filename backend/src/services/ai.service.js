@@ -303,14 +303,18 @@ async function callAI(options) {
 
 function buildScheduleFallback(context) {
   const schedules = context.schedules || [];
+  const published = schedules.filter((schedule) => schedule.status === "PUBLISHED");
+  const drafts = schedules.filter((schedule) => schedule.status !== "PUBLISHED");
   const byEmployee = new Map();
   const byDate = new Map();
+  const dailyLoad = new Map();
   const warnings = [];
 
-  schedules.forEach((schedule) => {
+  published.forEach((schedule) => {
     const employeeName = schedule.employee_name || `NV #${schedule.employee_id}`;
     byEmployee.set(employeeName, (byEmployee.get(employeeName) || 0) + 1);
     byDate.set(schedule.work_date, (byDate.get(schedule.work_date) || 0) + 1);
+    dailyLoad.set(schedule.work_date, (dailyLoad.get(schedule.work_date) || 0) + 1);
   });
 
   const counts = [...byEmployee.entries()].sort((a, b) => b[1] - a[1]);
@@ -326,7 +330,35 @@ function buildScheduleFallback(context) {
     });
   }
 
-  if (!schedules.length) {
+  const averageDailyLoad = dailyLoad.size
+    ? published.length / dailyLoad.size
+    : 0;
+  const peakDays = [...dailyLoad.entries()]
+    .filter(([, count]) => count > averageDailyLoad * 1.6 && count >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  if (peakDays.length) {
+    warnings.push({
+      level: "medium",
+      title: "Ngày có tải ca cao hơn bình thường",
+      detail: peakDays
+        .map(([date, count]) => `${date}: ${count} ca`)
+        .join("; "),
+      affected: peakDays.map(([date]) => date),
+    });
+  }
+
+  if (drafts.length) {
+    warnings.push({
+      level: "low",
+      title: "Còn lịch chưa công bố",
+      detail: `Có ${drafts.length} ca ở trạng thái nháp hoặc chờ xử lý; các ca này chưa được tính vào mức phủ lịch thực tế.`,
+      affected: [...new Set(drafts.map((schedule) => schedule.work_date))].slice(0, 8),
+    });
+  }
+
+  if (!published.length) {
     warnings.push({
       level: "high",
       title: "Chưa có lịch để phân tích",
@@ -335,14 +367,31 @@ function buildScheduleFallback(context) {
     });
   }
 
+  const spread = max && min ? max[1] - min[1] : 0;
+  const healthScore = Math.max(
+    0,
+    Math.min(100, 100 - spread * 8 - peakDays.length * 8 - (drafts.length ? 6 : 0)),
+  );
+
   return {
-    summary: schedules.length
-      ? `Có ${schedules.length} ca đã xếp cho ${counts.length} nhân viên.`
+    summary: published.length
+      ? `Có ${published.length} ca đã công bố cho ${counts.length} nhân viên trên ${byDate.size} ngày.`
       : "Chưa có dữ liệu lịch trong phạm vi đang chọn.",
     fairness: max && min
       ? `Khoảng chênh lệch hiện tại là ${max[1] - min[1]} ca giữa người nhiều nhất và ít nhất.`
       : "Chưa đủ dữ liệu để đánh giá cân bằng.",
-    coverage: `Có ${byDate.size} ngày có lịch trong phạm vi phân tích.`,
+    coverage: `Có ${byDate.size} ngày đã được phủ lịch; trung bình ${averageDailyLoad.toFixed(1)} ca/ngày.`,
+    metrics: {
+      health_score: Math.round(healthScore),
+      published_shifts: published.length,
+      draft_shifts: drafts.length,
+      scheduled_employees: counts.length,
+      scheduled_days: byDate.size,
+      load_gap: spread,
+    },
+    daily_load: [...dailyLoad.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, shifts]) => ({ date, shifts })),
     warnings,
     suggestions: [
       "Kiểm tra các nhân viên có số ca cao nhất trước khi công bố lịch.",
@@ -351,30 +400,6 @@ function buildScheduleFallback(context) {
     next_actions: [
       "Bật cài đặt cân bằng lịch nếu tháng này có nhiều ca lệch nhau.",
       "Dùng bộ lọc theo ngày để kiểm tra các ngày có nhiều ca liên tiếp.",
-    ],
-  };
-}
-
-function buildRequestFallback(request) {
-  const kind = request?.kind || "request";
-  const isPending = ["PENDING", "PENDING_TARGET", "EDIT_PENDING"].includes(request?.status);
-
-  return {
-    recommendation: isPending ? "needs_review" : "no_action",
-    confidence: "medium",
-    summary: kind === "swap"
-      ? "Yêu cầu đổi ca cần kiểm tra trùng lịch và ảnh hưởng tới hai nhân viên."
-      : "Yêu cầu cần kiểm tra trạng thái, lịch rảnh và tác động tới lịch đã xếp.",
-    risks: [
-      "Cần xác nhận không phát sinh trùng ca hoặc thiếu người sau khi xử lý.",
-    ],
-    suggested_reply: isPending
-      ? "Admin đã ghi nhận yêu cầu và sẽ kiểm tra lịch liên quan trước khi phản hồi."
-      : "Yêu cầu này đã được xử lý, vui lòng kiểm tra trạng thái hiện tại.",
-    checklist: [
-      "Kiểm tra trạng thái yêu cầu.",
-      "Đối chiếu lịch làm của nhân viên liên quan.",
-      "Ghi rõ lý do nếu từ chối hoặc hoàn tác.",
     ],
   };
 }
@@ -2276,6 +2301,31 @@ export async function analyzeSchedule({ month, year }) {
           summary: { type: "string" },
           fairness: { type: "string" },
           coverage: { type: "string" },
+          metrics: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              health_score: { type: "integer", minimum: 0, maximum: 100 },
+              published_shifts: { type: "integer", minimum: 0 },
+              draft_shifts: { type: "integer", minimum: 0 },
+              scheduled_employees: { type: "integer", minimum: 0 },
+              scheduled_days: { type: "integer", minimum: 0 },
+              load_gap: { type: "integer", minimum: 0 },
+            },
+            required: ["health_score", "published_shifts", "draft_shifts", "scheduled_employees", "scheduled_days", "load_gap"],
+          },
+          daily_load: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                date: { type: "string" },
+                shifts: { type: "integer", minimum: 0 },
+              },
+              required: ["date", "shifts"],
+            },
+          },
           warnings: {
             type: "array",
             items: {
@@ -2293,45 +2343,12 @@ export async function analyzeSchedule({ month, year }) {
           suggestions: { type: "array", items: { type: "string" } },
           next_actions: { type: "array", items: { type: "string" } },
         },
-        required: ["summary", "fairness", "coverage", "warnings", "suggestions", "next_actions"],
+        required: ["summary", "fairness", "coverage", "metrics", "daily_load", "warnings", "suggestions", "next_actions"],
       },
     },
     system:
-      "Bạn là trợ lý AI cho quản lý ca làm Qshift. Phân tích lịch bằng tiếng Việt, ngắn gọn, thực tế. Không bịa dữ liệu ngoài JSON được cung cấp.",
-    user: `Phân tích lịch xếp sau và trả JSON đúng schema.\n\n${compactJson(context)}`,
-  });
-}
-
-export async function analyzeRequest({ request }) {
-  const fallback = buildRequestFallback(request);
-  const month = request?.month || "";
-  const year = request?.year || "";
-  const context = month && year ? await getScheduleContext({ month, year }) : { schedules: [] };
-
-  return callAI({
-    fallback,
-    schema: {
-      name: "request_analysis",
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          recommendation: {
-            type: "string",
-            enum: ["approve", "reject", "remind", "needs_review", "no_action"],
-          },
-          confidence: { type: "string", enum: ["low", "medium", "high"] },
-          summary: { type: "string" },
-          risks: { type: "array", items: { type: "string" } },
-          suggested_reply: { type: "string" },
-          checklist: { type: "array", items: { type: "string" } },
-        },
-        required: ["recommendation", "confidence", "summary", "risks", "suggested_reply", "checklist"],
-      },
-    },
-    system:
-      "Bạn hỗ trợ admin xử lý yêu cầu đổi ca, xin sửa lịch rảnh, xin nghỉ hoặc phản hồi liên quan nhân sự. Trả lời tiếng Việt, không tự phê duyệt thay admin.",
-    user: `Hãy phân tích yêu cầu và dữ liệu lịch liên quan. Trả JSON đúng schema.\n\n${compactJson({ request, context })}`,
+      "Bạn là trợ lý phân tích lịch Qshift cho admin. Chỉ dùng số liệu trong JSON. Phân biệt lịch PUBLISHED với lịch nháp, ưu tiên cảnh báo có thể hành động: tải lệch giữa nhân viên, ngày cao điểm, lịch chưa công bố và mức phủ lịch. Không tự quyết định thay admin; nêu rõ khi không đủ dữ liệu để kết luận thiếu người. Trả lời tiếng Việt ngắn, có số liệu và JSON đúng schema.",
+    user: `Phân tích lịch trong phạm vi được chọn. metrics phải phản ánh trực tiếp JSON, daily_load phải liệt kê tải ca theo ngày đã công bố.\n\n${compactJson(context)}`,
   });
 }
 

@@ -12,7 +12,6 @@ import {
   TrashIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
-import AiRequestInsight from "../components/AiRequestInsight";
 import OperationalPageHeader from "../components/OperationalPageHeader";
 import { API_URL } from "../services/api";
 
@@ -1132,9 +1131,6 @@ export default function ShiftSwapManagementPage() {
                                   )}
                                 </div>
                               )}
-                            {(isAvailability || isSwap) && (
-                              <AiRequestInsight request={request} />
-                            )}
                           </div>
 
                           {isAvailability && canRespondAvailabilityEdit && (

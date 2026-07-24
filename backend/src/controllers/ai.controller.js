@@ -1,5 +1,4 @@
 import {
-  analyzeRequest,
   analyzeSchedule,
   answerEmployeeChat,
   answerManagerChat,
@@ -14,20 +13,6 @@ export async function analyzeScheduleController(req, res) {
     res.json(result);
   } catch (error) {
     console.error("[ai.analyzeSchedule]", error);
-    res.status(500).json({ message: error.message });
-  }
-}
-
-export async function analyzeRequestController(req, res) {
-  try {
-    if (!req.body?.request) {
-      return res.status(400).json({ message: "request is required" });
-    }
-
-    const result = await analyzeRequest({ request: req.body.request });
-    res.json(result);
-  } catch (error) {
-    console.error("[ai.analyzeRequest]", error);
     res.status(500).json({ message: error.message });
   }
 }
