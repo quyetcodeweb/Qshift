@@ -20,3 +20,10 @@ export const verifyAdmin = (req, res, next) => {
   }
   next();
 };
+
+export const verifyEmployee = (req, res, next) => {
+  if (!req.user || req.user.role !== "EMPLOYEE") {
+    return res.status(403).json({ message: "Employee access required" });
+  }
+  next();
+};

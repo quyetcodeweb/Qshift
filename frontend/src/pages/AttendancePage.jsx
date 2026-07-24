@@ -30,6 +30,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { getRole } from "../utils/auth";
 import { API_URL } from "../services/api";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 
 function authHeaders() {
   const token = localStorage.getItem("token");
@@ -503,21 +504,16 @@ export default function AttendancePage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Typography variant="h4" className="font-bold tracking-tight text-gray-950">
-            Chấm công hôm nay
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            {new Date(`${currentDay}T00:00:00`).toLocaleDateString("vi-VN", {
-              weekday: "long",
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-            })}
-          </Typography>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <OperationalPageHeader
+        title="Chấm công hôm nay"
+        description={new Date(`${currentDay}T00:00:00`).toLocaleDateString("vi-VN", {
+          weekday: "long",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })}
+        actions={
+          <div className="flex flex-wrap gap-2">
           {isAdmin && (
             <Button
               size="sm"
@@ -548,8 +544,9 @@ export default function AttendancePage() {
             <ArrowPathIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Làm mới
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">

@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { getRole } from "../utils/auth";
 import { API_URL } from "../services/api";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 
 function authHeaders() {
   const token = localStorage.getItem("token");
@@ -170,18 +171,12 @@ export default function AttendanceHistoryPage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Typography variant="h4" className="font-bold tracking-tight text-gray-950">
-            Lịch sử chấm công
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            {dateRange.startDate && dateRange.endDate
-              ? `${dateRange.startDate} đến ${dateRange.endDate}`
-              : "Hiển thị toàn bộ dữ liệu, mới nhất trước"}
-          </Typography>
-        </div>
-        <Button
+      <OperationalPageHeader
+        title="Lịch sử chấm công"
+        description={dateRange.startDate && dateRange.endDate
+          ? `${dateRange.startDate} đến ${dateRange.endDate}`
+          : "Theo dõi lịch sử chấm công, thời gian làm việc và các trạng thái cần lưu ý."}
+        actions={<Button
           variant="outlined"
           size="sm"
           onClick={fetchHistory}
@@ -190,8 +185,8 @@ export default function AttendanceHistoryPage() {
         >
           <ArrowPathIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Làm mới
-        </Button>
-      </div>
+        </Button>}
+      />
 
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">

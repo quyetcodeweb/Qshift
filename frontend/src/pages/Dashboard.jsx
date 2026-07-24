@@ -1070,15 +1070,15 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6 pb-8">
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-6 shadow-sm shadow-slate-900/5 sm:px-7 sm:py-7">
+      <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(17,24,39,0.05)] sm:px-7 sm:py-7">
         <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-blue-600 via-sky-500 to-cyan-400" />
         <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-blue-50/80 blur-3xl" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-[1.75rem] sm:leading-9">
+            <h1 className="text-lg font-bold tracking-tight text-gray-950 sm:text-[1.75rem] sm:leading-9">
               Tổng quan vận hành
             </h1>
-            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">
+            <p className="mt-2 hidden max-w-2xl text-sm font-medium leading-6 text-gray-600 sm:block">
               Theo dõi nhân sự, năng suất ca làm và phân bổ vai trò trong một
               màn hình.
             </p>

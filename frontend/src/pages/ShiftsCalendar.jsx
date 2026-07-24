@@ -691,7 +691,7 @@ function EmployeeSwapTab({ initialTarget, onClearInitialTarget }) {
         </button>
       </form>
 
-      <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-gray-200 border-l-4 border-l-blue-700 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(17,24,39,0.05)] sm:px-6 sm:py-5">
         <h2 className="mb-3 text-lg font-bold text-gray-950">
           Lịch sử yêu cầu đã gửi
         </h2>
@@ -1183,10 +1183,10 @@ export default function ShiftsCalendar() {
       <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-950 md:text-2xl">
+            <h1 className="text-lg font-bold tracking-tight text-gray-950 sm:text-2xl">
               Lịch làm việc
             </h1>
-            <p className="mt-1 text-sm font-medium text-gray-500">
+            <p className="mt-1 hidden text-sm font-medium text-gray-600 sm:block">
               Xem lịch chung theo ngày, tuần hoặc tháng.
             </p>
           </div>

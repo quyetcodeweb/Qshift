@@ -33,6 +33,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
 import defaultEmployeeAvatar from "../assets/default-employee-avatar.svg";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 
 const defaultForm = {
   name: "",
@@ -578,21 +579,11 @@ export default function EmployeePage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Typography
-            variant="h4"
-            className="font-bold tracking-tight text-gray-950"
-          >
-            Quản lý nhân viên
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            Quản lý hồ sơ, tài khoản và vai trò nhân viên trong cùng một màn
-            hình.
-          </Typography>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+      <OperationalPageHeader
+        title="Quản lý nhân viên"
+        description="Theo dõi hồ sơ, tài khoản và phân bổ vai trò nhân viên trong cùng một màn hình."
+        actions={
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <Button
             variant="outlined"
             size="sm"
@@ -611,8 +602,9 @@ export default function EmployeePage() {
             <PlusIcon className="h-5 w-5" />
             <span>Thêm nhân viên</span>
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <Card className="rounded-md border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 p-4 sm:p-5">

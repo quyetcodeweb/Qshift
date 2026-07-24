@@ -25,6 +25,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 
 const ACCESS_KEY = "availabilityFillRequest";
 
@@ -496,24 +497,18 @@ export default function AvailabilityPage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <Typography variant="h4" className="font-bold tracking-tight text-gray-950">
-            Thời gian rảnh
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            Chọn các ca mà nhân viên có thể làm để hệ thống tự động xếp lịch chính xác hơn.
-          </Typography>
-        </div>
-        <button
+      <OperationalPageHeader
+        title="Thời gian rảnh"
+        description="Theo dõi và cập nhật khả năng làm việc để lịch được xếp chính xác hơn."
+        actions={<button
           type="button"
           onClick={() => setHelpOpen(true)}
           className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
           aria-label="Chú thích chức năng"
         >
           <QuestionMarkCircleIcon className="h-6 w-6" />
-        </button>
-      </div>
+        </button>}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         <Card className="h-fit rounded-md border border-gray-200 bg-white p-4 shadow-sm lg:sticky lg:top-4">

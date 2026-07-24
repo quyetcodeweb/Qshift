@@ -13,6 +13,7 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import AiRequestInsight from "../components/AiRequestInsight";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 import { API_URL } from "../services/api";
 
 const statusMeta = {
@@ -745,17 +746,10 @@ export default function ShiftSwapManagementPage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 pb-8 sm:p-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
-            Quản lý yêu cầu
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-gray-600">
-            Theo dõi, phân loại và xử lý yêu cầu đổi ca, lịch rảnh và phản hồi
-            lương trong một nơi.
-          </p>
-        </div>
-        <button
+      <OperationalPageHeader
+        title="Quản lý yêu cầu"
+        description="Theo dõi, phân loại và xử lý yêu cầu đổi ca, lịch rảnh và phản hồi lương trong một nơi."
+        actions={<button
           type="button"
           onClick={fetchRequests}
           disabled={loading}
@@ -765,8 +759,8 @@ export default function ShiftSwapManagementPage() {
             className={`h-5 w-5 ${loading ? "animate-spin" : ""}`}
           />
           Làm mới
-        </button>
-      </div>
+        </button>}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[330px_minmax(0,1fr)]">
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
   BanknotesIcon,
   CalendarDaysIcon,
@@ -11,6 +12,7 @@ import {
   UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 
 const now = new Date();
 const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -51,10 +53,10 @@ const toneClasses = {
     soft: "bg-violet-50 text-violet-700 ring-violet-100",
     icon: "bg-violet-50 text-violet-700",
   },
-  slate: {
-    bar: "bg-slate-500",
-    soft: "bg-slate-100 text-slate-700 ring-slate-200",
-    icon: "bg-slate-100 text-slate-700",
+  gray: {
+    bar: "bg-gray-500",
+    soft: "bg-gray-100 text-gray-700 ring-gray-200",
+    icon: "bg-gray-100 text-gray-700",
   },
 };
 
@@ -128,7 +130,20 @@ function countBy(items, getKey) {
   }, new Map());
 }
 
-function Status({ children, tone = "slate" }) {
+function downloadCsv(filename, headers, rows) {
+  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const content = [headers, ...rows].map((row) => row.map(quote).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function Status({ children, tone = "gray" }) {
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${toneClasses[tone].soft}`}>
       {children}
@@ -141,22 +156,22 @@ function Metric({ icon, label, value, helper, tone = "blue" }) {
   const classes = toneClasses[tone] || toneClasses.blue;
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</div>
-          <div className="mt-2 truncate text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+          <div className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-gray-500">{label}</div>
+          <div className="mt-2 truncate text-2xl font-black tracking-tight text-gray-950 sm:text-3xl">
             {value}
           </div>
         </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${classes.icon}`}>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${classes.icon}`}>
           <MetricIcon className="h-5 w-5" />
         </div>
       </div>
-      <div className="mt-4 h-1.5 w-14 rounded-full bg-slate-100">
+      <div className="mt-4 h-1.5 w-14 rounded-full bg-gray-100">
         <div className={`h-full w-2/3 rounded-full ${classes.bar}`} />
       </div>
-      <div className="mt-3 text-sm font-medium leading-5 text-slate-600">{helper}</div>
+      <div className="mt-3 text-sm font-medium leading-5 text-gray-600">{helper}</div>
     </section>
   );
 }
@@ -168,11 +183,11 @@ function SolidButton({ children, onClick, disabled, active = true }) {
       onClick={onClick}
       disabled={disabled}
       style={{
-        backgroundColor: active ? "#0f172a" : "#ffffff",
+        backgroundColor: active ? "#1d4ed8" : "#ffffff",
         color: active ? "#ffffff" : "#334155",
-        borderColor: active ? "#0f172a" : "#cbd5e1",
+        borderColor: active ? "#1d4ed8" : "#cbd5e1",
       }}
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-md border px-4 text-sm font-black transition hover:opacity-90 disabled:opacity-60"
+      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition hover:-translate-y-0.5 hover:opacity-90 disabled:opacity-60"
     >
       {children}
     </button>
@@ -181,11 +196,11 @@ function SolidButton({ children, onClick, disabled, active = true }) {
 
 function Section({ title, subtitle, action, children }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+    <section className="rounded-2xl border border-gray-200 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+      <div className="flex flex-col gap-2 border-b border-gray-100 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div>
-          <h2 className="text-base font-black text-slate-950 sm:text-lg">{title}</h2>
-          {subtitle && <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{subtitle}</p>}
+          <h2 className="text-base font-black text-gray-950 sm:text-lg">{title}</h2>
+          {subtitle && <p className="mt-1 text-sm font-medium leading-6 text-gray-500">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -196,7 +211,7 @@ function Section({ title, subtitle, action, children }) {
 
 function EmptyState({ text = "Chưa có dữ liệu" }) {
   return (
-    <div className="rounded-md border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
+    <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm font-bold text-gray-500">
       {text}
     </div>
   );
@@ -208,7 +223,7 @@ function BarList({ data, suffix = "", empty = "Chưa có dữ liệu" }) {
   if (!data.length) return <EmptyState text={empty} />;
 
   return (
-    <div className="space-y-3">
+    <div className="max-h-80 space-y-3 overflow-y-auto pr-2 overscroll-contain">
       {data.map((item, index) => (
         <div key={`${item.label}-${index}`} className="min-w-0">
           <div className="mb-1 flex items-center justify-between gap-3 text-sm">
@@ -264,10 +279,10 @@ function EmployeeTable({ rows }) {
 
   return (
     <>
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="hidden max-h-[34rem] overflow-auto overscroll-contain lg:block">
         <table className="w-full min-w-[920px] text-left">
           <thead>
-            <tr className="border-b border-slate-200 text-xs font-black uppercase tracking-wide text-slate-500">
+            <tr className="sticky top-0 z-10 border-b border-gray-200 bg-white text-xs font-black uppercase tracking-wide text-gray-500">
               <th className="py-3 pr-4">Nhân viên</th>
               <th className="px-4 py-3 text-right">Ca</th>
               <th className="px-4 py-3 text-right">Giờ công</th>
@@ -300,7 +315,7 @@ function EmployeeTable({ rows }) {
         </table>
       </div>
 
-      <div className="grid gap-3 lg:hidden">
+      <div className="grid max-h-[34rem] gap-3 overflow-y-auto pr-1 overscroll-contain lg:hidden">
         {rows.map((row) => (
           <article key={row.employee_id} className="rounded-md border border-slate-200 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -341,7 +356,7 @@ function AttentionList({ rows }) {
   if (!rows.length) return <EmptyState text="Không có cảnh báo" />;
 
   return (
-    <div className="space-y-3">
+    <div className="max-h-[30rem] space-y-3 overflow-y-auto pr-2 overscroll-contain">
       {rows.map((row) => (
         <div key={row.employee_id} className="rounded-md border border-slate-200 p-3">
           <div className="flex items-start justify-between gap-3">
@@ -367,7 +382,7 @@ function EventList({ events }) {
   if (!events.length) return <EmptyState text="Chưa có lượt ra vào" />;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid max-h-[32rem] gap-3 overflow-y-auto pr-2 overscroll-contain lg:grid-cols-2">
       {events.map((event) => (
         <div
           key={`${event.schedule_id}-${event.effective_check_in || event.check_in || event.work_date}`}
@@ -538,59 +553,113 @@ export default function StatisticsPage() {
     [payrollDetails],
   );
 
+  const operationalSignals = useMemo(() => {
+    const shiftsPerEmployee = employeeStats.active ? schedules.length / employeeStats.active : 0;
+    const busiestShift = scheduleStats.byShift[0];
+    return [
+      {
+        label: "Phủ lịch nhân sự",
+        value: `${fmt(employeeStats.noSchedule)} người chưa có ca`,
+        detail: `Đang có ${fmt(schedules.length)} ca được xếp cho ${fmt(employeeStats.active)} nhân viên hoạt động.`,
+        tone: employeeStats.noSchedule ? "orange" : "green",
+      },
+      {
+        label: "Kỷ luật giờ giấc",
+        value: `${fmt(attendanceStats.late)} lượt đi trễ`,
+        detail: `${fmt(attendanceStats.lateMinutes)} phút trễ, tỷ lệ hoàn tất chấm công ${fmt(attendanceStats.completionRate)}%.`,
+        tone: attendanceStats.late ? "orange" : "green",
+      },
+      {
+        label: "Ca cần xử lý lương",
+        value: `${fmt(payrollTotals.issue_shifts)} ca`,
+        detail: `Hiệu suất lương hiện tại ${fmt(payrollTotals.efficiency)}%; ${busiestShift ? `${busiestShift.label} là ca được xếp nhiều nhất.` : "Chưa có dữ liệu ca."}`,
+        tone: payrollTotals.issue_shifts ? "red" : "blue",
+      },
+      {
+        label: "Mật độ phân ca",
+        value: `${fmt(shiftsPerEmployee, 1)} ca / người`,
+        detail: "Chỉ số tham khảo theo số ca đã xếp và nhân sự đang hoạt động trong bộ lọc.",
+        tone: "blue",
+      },
+    ];
+  }, [attendanceStats, employeeStats, payrollTotals, scheduleStats, schedules.length]);
+
+  const exportReport = () => {
+    downloadCsv(
+      `thong-ke-van-hanh-${month}.csv`,
+      ["Nhân viên", "Số ca", "Giờ lịch", "Giờ công", "Hiệu suất", "Đi trễ", "Ca lỗi", "Lương tạm tính"],
+      payrollRows.map((row) => [
+        row.employee_name,
+        row.total_shifts,
+        row.scheduled_hours,
+        row.worked_hours,
+        `${row.efficiency || 0}%`,
+        row.late_shifts,
+        row.issue_shifts,
+        row.total_salary,
+      ]),
+    );
+  };
+
   const show = (...keys) => activeView === "overview" || keys.includes(activeView);
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5">
-      <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_560px] xl:items-end">
-          <div>
-            <div className="text-xs font-black uppercase tracking-wide text-blue-700">QShift Analytics</div>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-              Thống kê vận hành
-            </h1>
-            <div className="mt-2 flex flex-wrap gap-2 text-sm font-bold text-slate-600">
-              <span className="rounded-md bg-slate-100 px-2.5 py-1">{selectedEmployeeName}</span>
-              <span className="rounded-md bg-slate-100 px-2.5 py-1">
-                {range.startDate} - {range.endDate}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <label className="grid gap-1 text-sm font-bold text-slate-700">
-              Tháng
-              <input
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value || currentMonth)}
-                className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-600"
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-bold text-slate-700">
-              Nhân viên
-              <select
-                value={employeeId}
-                onChange={(event) => setEmployeeId(event.target.value)}
-                className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-600"
-              >
-                <option value="all">Tất cả nhân viên</option>
-                {employees.map((employee) => (
-                  <option key={employee.employee_id} value={employee.employee_id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+    <div className="mx-auto max-w-[1600px] space-y-5 pb-6">
+      <OperationalPageHeader
+        title="Thống kê vận hành"
+        description="Theo dõi nhân sự, năng suất ca làm, chấm công và lương tạm tính trong một màn hình quản trị."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <SolidButton onClick={exportReport} disabled={!payrollRows.length} active={false}>
+              <ArrowDownTrayIcon className="h-5 w-5" />
+              Xuất CSV
+            </SolidButton>
             <SolidButton onClick={fetchData} disabled={loading}>
               <ArrowPathIcon className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
               Làm mới
             </SolidButton>
           </div>
+        }
+      >
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-gray-600">
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">{selectedEmployeeName}</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">{range.startDate} — {range.endDate}</span>
+        </div>
+      </OperationalPageHeader>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)] sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <label className="grid gap-1 text-sm font-bold text-gray-700">
+            Tháng báo cáo
+            <input
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value || currentMonth)}
+              className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-bold text-gray-700">
+            Phạm vi nhân sự
+            <select
+              value={employeeId}
+              onChange={(event) => setEmployeeId(event.target.value)}
+              className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="all">Tất cả nhân viên</option>
+              {employees.map((employee) => (
+                <option key={employee.employee_id} value={employee.employee_id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={() => { setMonth(currentMonth); setEmployeeId("all"); }} className="self-end rounded-xl px-3 py-3 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-900">
+            Đặt lại bộ lọc
+          </button>
         </div>
       </section>
 
-      <nav className="flex gap-2 overflow-x-auto rounded-md border border-slate-200 bg-white p-2 shadow-sm">
+      <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-gray-200 bg-gray-50 p-1.5">
         {views.map((view) => {
           const ViewIcon = view.icon;
           return (
@@ -599,11 +668,11 @@ export default function StatisticsPage() {
               type="button"
               onClick={() => setActiveView(view.key)}
               style={{
-                backgroundColor: activeView === view.key ? "#0f172a" : "#ffffff",
+                backgroundColor: activeView === view.key ? "#1d4ed8" : "transparent",
                 color: activeView === view.key ? "#ffffff" : "#475569",
-                borderColor: activeView === view.key ? "#0f172a" : "transparent",
+                borderColor: activeView === view.key ? "#1d4ed8" : "transparent",
               }}
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-black transition hover:opacity-90"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-black transition hover:opacity-90"
             >
               <ViewIcon className="h-4 w-4" />
               {view.label}
@@ -613,16 +682,16 @@ export default function StatisticsPage() {
       </nav>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="grid min-h-[420px] place-items-center rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="grid min-h-[420px] place-items-center rounded-2xl border border-gray-200 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
           <div className="flex flex-col items-center gap-3">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-            <div className="text-sm font-bold text-slate-600">Đang tổng hợp thống kê...</div>
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <div className="text-sm font-bold text-gray-600">Đang tổng hợp thống kê...</div>
           </div>
         </div>
       ) : (
@@ -657,6 +726,23 @@ export default function StatisticsPage() {
               tone="red"
             />
           </div>
+
+          {show("overview") && (
+            <Section
+              title="Tín hiệu vận hành"
+              subtitle="Các điểm cần ưu tiên dựa trên dữ liệu trong kỳ đang chọn — không dùng dữ liệu mô phỏng."
+            >
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {operationalSignals.map((signal) => (
+                  <article key={signal.label} className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                    <Status tone={signal.tone}>{signal.label}</Status>
+                    <div className="mt-3 text-lg font-black tracking-tight text-gray-950">{signal.value}</div>
+                    <p className="mt-2 text-sm leading-5 text-gray-600">{signal.detail}</p>
+                  </article>
+                ))}
+              </div>
+            </Section>
+          )}
 
           {show("employees") && (
             <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">

@@ -634,6 +634,273 @@ function buildChatFallback(message, context) {
   };
 }
 
+const CHAT_DATA_SOURCE_LABELS = {
+  today_schedules: "Lịch làm việc đã công bố hôm nay",
+  active_schedules: "Ca đang diễn ra",
+  today_attendance: "Chấm công hôm nay",
+  attendance_history: "Lịch sử chấm công toàn hệ thống",
+  pending_requests: "Các yêu cầu đang chờ xử lý",
+  admin_requests: "Toàn bộ yêu cầu vận hành",
+  employees: "Danh sách và trạng thái nhân sự",
+  employee_directory: "Hồ sơ và tài khoản nhân viên",
+  payroll_records: "Dữ liệu bảng lương",
+  schedule_scope: "Lịch đã công bố trong phạm vi đang xem",
+  upcoming_schedules: "Lịch làm việc 7 ngày tới",
+  shift_catalog: "Danh mục ca làm việc",
+};
+
+function buildChatDataSources(keys = []) {
+  return [...new Set(keys)]
+    .filter((key) => CHAT_DATA_SOURCE_LABELS[key])
+    .map((key) => ({ key, label: CHAT_DATA_SOURCE_LABELS[key] }));
+}
+
+function displayEmployeeName(row = {}) {
+  return row.employee_name || `Nhân viên #${row.employee_id}`;
+}
+
+function scopeText(context = {}, isToday = false) {
+  if (isToday) return `hôm nay (${context.now?.date || ""})`;
+  const month = context.scope?.month;
+  const year = context.scope?.year;
+  return month && month !== "all" && year && year !== "all"
+    ? `tháng ${month}/${year}`
+    : "phạm vi lịch đang xem";
+}
+
+function groupScheduleRows(rows = [], keyForRow, valueName) {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const key = keyForRow(row);
+    if (!key) return;
+    const item = grouped.get(key) || { name: valueName(row), count: 0, days: new Set() };
+    item.count += Number(row.shift_count || 1);
+    if (row.work_date) item.days.add(row.work_date);
+    grouped.set(key, item);
+  });
+  return [...grouped.values()].map((item) => ({
+    ...item,
+    day_count: item.days.size || Number(item.work_day_count || 0),
+  }));
+}
+
+function buildDataReasoningFallback(message, context = {}) {
+  const question = normalizeVietnamese(message);
+  const isToday = question.includes("hom nay") || question.includes("today");
+  const scheduleRows = isToday
+    ? groupScheduleRows(
+        context.today_schedules || [],
+        (row) => row.employee_id,
+        displayEmployeeName,
+      )
+    : (context.schedule_workload || []).map((row) => ({
+        name: displayEmployeeName(row),
+        count: Number(row.shift_count || 0),
+        day_count: Number(row.work_day_count || 0),
+      }));
+  const scope = scopeText(context, isToday);
+
+  const asksShiftDensity =
+    (question.includes("ca nao") || question.includes("ca gi") || question.includes("shift")) &&
+    (question.includes("dong") ||
+      question.includes("nhieu nguoi") ||
+      question.includes("it nguoi") ||
+      question.includes("thieu nguoi"));
+
+  if (asksShiftDensity) {
+    const rows = isToday
+      ? groupScheduleRows(
+          context.today_schedules || [],
+          (row) => row.shift_id,
+          (row) => row.shift_name || `Ca #${row.shift_id}`,
+        )
+      : (context.shift_workload || []).map((row) => ({
+          name: row.shift_name || `Ca #${row.shift_id}`,
+          count: Number(row.employee_count || 0),
+          day_count: Number(row.work_day_count || 0),
+        }));
+    const wantsLowest = question.includes("it nguoi") || question.includes("thieu nguoi");
+    const sorted = [...rows].sort((a, b) =>
+      wantsLowest ? a.count - b.count : b.count - a.count,
+    );
+    const leading = sorted[0];
+
+    if (!leading) {
+      return {
+        answer: `Chưa có lịch đã công bố trong ${scope} để so sánh mật độ từng ca.`,
+        highlights: [],
+        followups: ["Bạn có thể tạo hoặc công bố lịch trước khi kiểm tra phân bổ ca."],
+        actions: [action("navigate", "Tạo lịch", "/createSchedule", "Mở trang tạo lịch")],
+        data_sources: buildChatDataSources([isToday ? "today_schedules" : "schedule_scope"]),
+      };
+    }
+
+    const tied = sorted.filter((row) => row.count === leading.count).slice(0, 3);
+    return {
+      answer: `${tied.map((row) => row.name).join(", ")} đang có ${
+        wantsLowest ? "ít" : "nhiều"
+      } nhân sự được xếp nhất trong ${scope}: ${leading.count} lượt phân công.`,
+      highlights: sorted.slice(0, 4).map((row) => `${row.name}: ${row.count} lượt phân công`),
+      followups: ["Số liệu là lượt phân công; cần đối chiếu yêu cầu nhân sự của từng ca trước khi kết luận thiếu người."],
+      actions: [action("navigate", "Xem lịch làm việc", "/shifts", "Mở lịch làm việc")],
+      data_sources: buildChatDataSources([isToday ? "today_schedules" : "schedule_scope"]),
+    };
+  }
+
+  const asksWorkload =
+    question.includes("nhieu ca") ||
+    question.includes("it ca") ||
+    question.includes("qua tai") ||
+    question.includes("phan bo ca") ||
+    question.includes("lam nhieu nhat") ||
+    question.includes("lam it nhat");
+
+  if (asksWorkload) {
+    const wantsLowest =
+      question.includes("it ca") || question.includes("lam it nhat");
+    const sorted = [...scheduleRows].sort((a, b) =>
+      wantsLowest ? a.count - b.count : b.count - a.count,
+    );
+    const leading = sorted[0];
+
+    if (!leading) {
+      return {
+        answer: `Chưa có lịch đã công bố trong ${scope} để phân tích tải ca theo nhân viên.`,
+        highlights: [],
+        followups: ["Bạn có thể chọn một phạm vi có lịch đã công bố rồi hỏi lại."],
+        actions: [action("navigate", "Xem lịch làm việc", "/shifts", "Mở lịch làm việc")],
+        data_sources: buildChatDataSources([isToday ? "today_schedules" : "schedule_scope"]),
+      };
+    }
+
+    const tied = sorted.filter((row) => row.count === leading.count).slice(0, 3);
+    const total = sorted.reduce((sum, row) => sum + row.count, 0);
+    return {
+      answer: `${tied.map((row) => row.name).join(", ")} có ${
+        wantsLowest ? "ít" : "nhiều"
+      } ca nhất trong ${scope}: ${leading.count} ca.`,
+      highlights: [
+        `Tổng ${total} ca đã công bố cho ${sorted.length} nhân viên.`,
+        ...sorted.slice(0, 4).map((row) => `${row.name}: ${row.count} ca${row.day_count ? ` / ${row.day_count} ngày` : ""}`),
+      ],
+      followups: ["Bạn có thể hỏi tiếp: Ca nào đang đông hoặc ít người nhất?"],
+      actions: [action("navigate", "Xem lịch làm việc", "/shifts", "Mở lịch làm việc")],
+      data_sources: buildChatDataSources([isToday ? "today_schedules" : "schedule_scope"]),
+    };
+  }
+
+  const asksUpcoming =
+    question.includes("tuan nay") ||
+    question.includes("sap toi") ||
+    question.includes("7 ngay") ||
+    question.includes("ngay toi");
+  if (asksUpcoming) {
+    const rows = context.operational?.upcoming_schedules_7d || [];
+    const byDate = groupScheduleRows(
+      rows,
+      (row) => row.work_date,
+      (row) => row.work_date,
+    );
+    if (!byDate.length) {
+      return {
+        answer: "Chưa có lịch đã công bố trong 7 ngày tới.",
+        highlights: [],
+        followups: ["Bạn có thể mở trang tạo lịch để kiểm tra và công bố lịch."],
+        actions: [action("navigate", "Tạo lịch", "/createSchedule", "Mở trang tạo lịch")],
+        data_sources: buildChatDataSources(["upcoming_schedules"]),
+      };
+    }
+    return {
+      answer: `Trong 7 ngày tới có ${rows.length} lượt phân công trên ${byDate.length} ngày đã có lịch.`,
+      highlights: byDate.slice(0, 7).map((row) => `${row.name}: ${row.count} ca`),
+      followups: ["Bạn có thể hỏi tiếp về tải ca hoặc nhân sự trong ngày cụ thể."],
+      actions: [action("navigate", "Xem lịch làm việc", "/shifts", "Mở lịch làm việc")],
+      data_sources: buildChatDataSources(["upcoming_schedules"]),
+    };
+  }
+
+  const asksAttendanceOverview =
+    !isLateAttendanceQuestion(question) &&
+    (question.includes("cham cong") ||
+      question.includes("check in") ||
+      question.includes("checkin") ||
+      question.includes("vang mat"));
+  if (asksAttendanceOverview) {
+    const summary = context.context_summary?.attendance_today || {};
+    const total = Number(context.today_attendance?.length || 0);
+    return {
+      answer: total
+        ? `Hôm nay có ${total} bản ghi chấm công: ${summary.checked_in || 0} đang trong ca, ${
+            summary.completed || 0
+          } đã kết thúc, ${summary.late || 0} đi trễ và ${summary.not_checked_in || 0} chưa check-in.`
+        : "Hôm nay chưa có bản ghi chấm công để tổng hợp.",
+      highlights: total
+        ? [
+            `Đúng giờ: ${summary.on_time || 0}.`,
+            `Ca sắp tới: ${summary.upcoming || 0}.`,
+          ]
+        : [],
+      followups: ["Bạn có thể hỏi tiếp: Hôm nay có ai đi trễ không?"],
+      actions: [action("navigate", "Xem chấm công", "/attendance", "Mở trang chấm công")],
+      data_sources: buildChatDataSources(["today_attendance"]),
+    };
+  }
+
+  const asksPayroll = question.includes("luong") || question.includes("payroll");
+  if (asksPayroll) {
+    const rows = context.operational?.payroll_records || [];
+    const totalSalary = rows.reduce((sum, row) => sum + Number(row.total_salary || 0), 0);
+    const totalHours = rows.reduce((sum, row) => sum + Number(row.total_hours || 0), 0);
+    return {
+      answer: rows.length
+        ? `Đã tìm thấy ${rows.length} bản ghi lương gần đây, tổng ${totalHours.toLocaleString("vi-VN")} giờ và ${totalSalary.toLocaleString("vi-VN")} VNĐ.`
+        : "Chưa có bản ghi lương để tổng hợp.",
+      highlights: rows.slice(0, 5).map(
+        (row) => `${row.employee_name || "Nhân viên"} · ${row.month}/${row.year}: ${Number(row.total_salary || 0).toLocaleString("vi-VN")} VNĐ`,
+      ),
+      followups: ["Bạn có thể hỏi tiếp về nhân viên hoặc kỳ lương cụ thể."],
+      actions: [action("navigate", "Mở bảng lương", "/payroll?tab=salary", "Mở trang bảng lương")],
+      data_sources: buildChatDataSources(["payroll_records"]),
+    };
+  }
+
+  const asksEmployeeDirectory =
+    question.includes("danh sach nhan vien") || question.includes("ho so nhan vien") || question.includes("tai khoan nhan vien");
+  if (asksEmployeeDirectory) {
+    const rows = context.operational?.employee_directory || [];
+    return {
+      answer: rows.length
+        ? `Hệ thống có ${rows.length} hồ sơ nhân viên trong danh mục hiện tại.`
+        : "Chưa có hồ sơ nhân viên để hiển thị.",
+      highlights: rows.slice(0, 8).map(
+        (row) => `${row.name || "Nhân viên"} · ${row.employee_status || "Chưa rõ trạng thái"} · ${row.account_role || "Chưa có tài khoản"}`,
+      ),
+      followups: ["Bạn có thể nêu tên nhân viên để QQ tra cứu chi tiết hơn khi dữ liệu phù hợp."],
+      actions: [action("navigate", "Mở quản lý nhân viên", "/employeePage", "Mở hồ sơ nhân viên")],
+      data_sources: buildChatDataSources(["employee_directory"]),
+    };
+  }
+
+  const asksAttendanceHistory =
+    question.includes("lich su cham cong") || question.includes("cham cong gan day");
+  if (asksAttendanceHistory) {
+    const rows = context.operational?.attendance_history || [];
+    return {
+      answer: rows.length
+        ? `Đã tìm thấy ${rows.length} bản ghi chấm công gần đây trong phạm vi tra cứu.`
+        : "Chưa có bản ghi chấm công lịch sử để hiển thị.",
+      highlights: rows.slice(0, 8).map(
+        (row) => `${row.work_date || "-"} · ${row.employee_name || "Nhân viên"} · ${row.shift_name || "Ca làm"} · vào ${row.check_in || "-"}`,
+      ),
+      followups: ["Bạn có thể hỏi tiếp về một nhân viên hoặc ngày cụ thể."],
+      actions: [action("navigate", "Mở lịch sử chấm công", "/attendance/history", "Mở lịch sử chấm công")],
+      data_sources: buildChatDataSources(["attendance_history"]),
+    };
+  }
+
+  return null;
+}
+
 function normalizeVietnamese(value) {
   return String(value || "")
     .normalize("NFD")
@@ -665,6 +932,10 @@ function hideProviderDetails(payload = {}) {
     answer: hideProviderText(payload.answer),
     highlights: (payload.highlights || []).map(hideProviderText),
     followups: (payload.followups || []).map(hideProviderText),
+    data_sources: (payload.data_sources || []).map((item) => ({
+      ...item,
+      label: hideProviderText(item.label),
+    })),
     actions: (payload.actions || []).map((item) => ({
       ...item,
       label: hideProviderText(item.label),
@@ -969,6 +1240,22 @@ const QQ_TOOL_DEFINITIONS = [
     name: "shift_catalog",
     description: "Danh mục ca làm, giờ bắt đầu/kết thúc và màu ca.",
   },
+  {
+    name: "employee_directory",
+    description: "Hồ sơ, tài khoản, trạng thái và vai trò của toàn bộ nhân viên; chỉ dành cho admin.",
+  },
+  {
+    name: "attendance_history",
+    description: "Lịch sử chấm công gần đây của toàn hệ thống, gồm giờ vào/ra và trạng thái; chỉ dành cho admin.",
+  },
+  {
+    name: "payroll_records",
+    description: "Bảng lương, tổng giờ và phản hồi lương; chỉ dành cho admin.",
+  },
+  {
+    name: "admin_requests",
+    description: "Toàn bộ yêu cầu đổi ca, nghỉ phép, lịch rảnh, xin trễ và phản hồi lương; chỉ dành cho admin.",
+  },
 ];
 
 const QQ_TOOL_NAMES = QQ_TOOL_DEFINITIONS.map((tool) => tool.name);
@@ -1045,6 +1332,20 @@ function executeQQTools(toolNames = [], compactContext = {}) {
       results[name] = {
         rows: compactContext.operational?.shift_catalog || [],
       };
+    } else if (name === "employee_directory") {
+      results[name] = {
+        rows: compactContext.operational?.employee_directory || [],
+      };
+    } else if (name === "attendance_history") {
+      results[name] = {
+        rows: compactContext.operational?.attendance_history || [],
+      };
+    } else if (name === "payroll_records") {
+      results[name] = {
+        rows: compactContext.operational?.payroll_records || [],
+      };
+    } else if (name === "admin_requests") {
+      results[name] = compactContext.operational?.admin_requests || {};
     }
   }
 
@@ -1175,6 +1476,10 @@ async function answerWithQQTools({
 
   return {
     ...answer,
+    data_sources:
+      answer.data_sources?.length > 0
+        ? answer.data_sources
+        : buildChatDataSources(toolRun.selected_tools),
     qq_tools: toolRun.selected_tools,
   };
 }
@@ -1188,6 +1493,12 @@ async function getOperationalContext({ now }) {
     availabilityRows,
     payrollRows,
     lateRequestRows,
+    employeeDirectory,
+    attendanceHistory,
+    payrollRecords,
+    allAvailabilityRequests,
+    allSwapRequests,
+    leaveRequests,
   ] = await Promise.all([
     queryOrEmpty(
       `SELECT COALESCE(status, 'UNKNOWN') AS status, COUNT(*) AS count
@@ -1296,15 +1607,127 @@ async function getOperationalContext({ now }) {
        ORDER BY lr.created_at DESC
        LIMIT 8`,
     ),
+    queryOrEmpty(
+      `SELECT
+         e.employee_id,
+         e.name,
+         e.email,
+         e.phone,
+         e.status AS employee_status,
+         e.hourly_rate,
+         DATE_FORMAT(e.hire_date, '%Y-%m-%d') AS hire_date,
+         u.user_id,
+         u.username,
+         u.role AS account_role,
+         u.status AS account_status
+       FROM employees e
+       LEFT JOIN users u ON e.user_id = u.user_id
+       ORDER BY e.name ASC
+       LIMIT 500`,
+    ),
+    queryOrEmpty(
+      `SELECT
+         a.attendance_id,
+         e.name AS employee_name,
+         DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
+         sh.shift_name,
+         TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+         TIME_FORMAT(sh.end_time, '%H:%i') AS end_time,
+         DATE_FORMAT(a.check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
+         DATE_FORMAT(a.check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
+         a.status
+       FROM attendance a
+       LEFT JOIN employees e ON a.employee_id = e.employee_id
+       LEFT JOIN schedules s ON a.schedule_id = s.schedule_id
+       LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
+       ORDER BY s.work_date DESC, a.attendance_id DESC
+       LIMIT 1000`,
+    ),
+    queryOrEmpty(
+      `SELECT
+         p.payroll_id,
+         e.name AS employee_name,
+         p.month,
+         p.year,
+         p.total_hours,
+         p.total_salary,
+         DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM payroll p
+       LEFT JOIN employees e ON p.employee_id = e.employee_id
+       ORDER BY p.year DESC, p.month DESC, e.name ASC
+       LIMIT 1000`,
+    ),
+    queryOrEmpty(
+      `SELECT
+         ar.id,
+         e.name AS employee_name,
+         ar.month,
+         ar.year,
+         COALESCE(ar.status, 'PENDING') AS status,
+         ar.data,
+         DATE_FORMAT(ar.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM availability_requests ar
+       LEFT JOIN employees e ON ar.employee_id = e.employee_id OR ar.user_id = e.user_id
+       ORDER BY ar.created_at DESC, ar.id DESC
+       LIMIT 500`,
+    ),
+    queryOrEmpty(
+      `SELECT
+         sr.swap_request_id,
+         sr.status,
+         req.name AS requester_employee_name,
+         tgt.name AS target_employee_name,
+         DATE_FORMAT(rs.work_date, '%Y-%m-%d') AS requester_work_date,
+         rsh.shift_name AS requester_shift_name,
+         DATE_FORMAT(ts.work_date, '%Y-%m-%d') AS target_work_date,
+         tsh.shift_name AS target_shift_name,
+         sr.requester_note,
+         sr.admin_cancel_reason,
+         DATE_FORMAT(sr.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM shift_swap_requests sr
+       LEFT JOIN employees req ON sr.requester_employee_id = req.employee_id
+       LEFT JOIN employees tgt ON sr.target_employee_id = tgt.employee_id
+       LEFT JOIN schedules rs ON sr.requester_schedule_id = rs.schedule_id
+       LEFT JOIN shifts rsh ON rs.shift_id = rsh.shift_id
+       LEFT JOIN schedules ts ON sr.target_schedule_id = ts.schedule_id
+       LEFT JOIN shifts tsh ON ts.shift_id = tsh.shift_id
+       ORDER BY sr.created_at DESC, sr.swap_request_id DESC
+       LIMIT 500`,
+    ),
+    queryOrEmpty(
+      `SELECT
+         r.request_id,
+         e.name AS employee_name,
+         r.request_type,
+         DATE_FORMAT(r.start_date, '%Y-%m-%d') AS start_date,
+         DATE_FORMAT(r.end_date, '%Y-%m-%d') AS end_date,
+         r.reason,
+         r.status,
+         DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM requests r
+       LEFT JOIN employees e ON r.employee_id = e.employee_id
+       ORDER BY r.created_at DESC, r.request_id DESC
+       LIMIT 500`,
+    ),
   ]);
 
   return {
     employee_status_counts: employeeStatusRows,
     shift_catalog: shiftRows,
+    employee_directory: employeeDirectory,
+    attendance_history: attendanceHistory,
+    payroll_records: payrollRecords,
     upcoming_schedules_7d: upcomingSchedules,
     pending_request_samples: {
       shift_swaps: swapRows,
       availability: availabilityRows,
+      payroll_feedback: payrollRows,
+      late_requests: lateRequestRows,
+    },
+    admin_requests: {
+      availability: allAvailabilityRequests,
+      shift_swaps: allSwapRequests,
+      leave_requests: leaveRequests,
       payroll_feedback: payrollRows,
       late_requests: lateRequestRows,
     },
@@ -1345,6 +1768,284 @@ function shouldUseImmediateLocalAnswer(message) {
   );
 }
 
+function employeeChatError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function describePersonalSchedule(schedule) {
+  return `${schedule.work_date} · ${schedule.shift_name || "Ca làm"} (${schedule.start_time || "--:--"} - ${
+    schedule.end_time || "--:--"
+  })`;
+}
+
+function employeeChatAction(label, path, description) {
+  return action("navigate", label, path, description);
+}
+
+async function getEmployeeChatContext(authUser = {}) {
+  const userId = authUser?.user_id || authUser?.id;
+  if (!userId) {
+    throw employeeChatError("Không xác định được phiên đăng nhập.", 401);
+  }
+
+  const employeeRows = await queryOrEmpty(
+    `SELECT employee_id, name
+     FROM employees
+     WHERE user_id = ?
+     LIMIT 1`,
+    [userId],
+  );
+  const employee = employeeRows[0];
+  if (!employee) {
+    throw employeeChatError("Tài khoản này chưa được liên kết với hồ sơ nhân viên.", 403);
+  }
+
+  const now = vietnamDateTimeParts();
+  const upcomingEnd = addDays(now.date, 7);
+  const [todaySchedules, upcomingSchedules, todayAttendance, availabilityRequests, swapRequests, lateRequests] =
+    await Promise.all([
+      queryOrEmpty(
+        `SELECT
+           s.schedule_id,
+           s.shift_id,
+           sh.shift_name,
+           TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+           TIME_FORMAT(sh.end_time, '%H:%i') AS end_time,
+           DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date
+         FROM schedules s
+         LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
+         WHERE s.employee_id = ? AND s.status = 'PUBLISHED' AND s.work_date = ?
+         ORDER BY sh.start_time ASC, s.schedule_id ASC`,
+        [employee.employee_id, now.date],
+      ),
+      queryOrEmpty(
+        `SELECT
+           s.schedule_id,
+           s.shift_id,
+           sh.shift_name,
+           TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+           TIME_FORMAT(sh.end_time, '%H:%i') AS end_time,
+           DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date
+         FROM schedules s
+         LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
+         WHERE s.employee_id = ? AND s.status = 'PUBLISHED' AND s.work_date BETWEEN ? AND ?
+         ORDER BY s.work_date ASC, sh.start_time ASC
+         LIMIT 50`,
+        [employee.employee_id, now.date, upcomingEnd],
+      ),
+      queryOrEmpty(
+        `SELECT
+           s.schedule_id,
+           sh.shift_name,
+           TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+           TIME_FORMAT(sh.end_time, '%H:%i') AS end_time,
+           DATE_FORMAT(a.check_in, '%Y-%m-%d %H:%i:%s') AS check_in,
+           DATE_FORMAT(a.check_out, '%Y-%m-%d %H:%i:%s') AS check_out,
+           CASE
+             WHEN a.check_in IS NULL AND TIMESTAMP(s.work_date, sh.start_time) > (UTC_TIMESTAMP() + INTERVAL 7 HOUR) THEN 'UPCOMING'
+             WHEN a.check_in IS NULL THEN 'NOT_CHECKED_IN'
+             WHEN a.status = 'LATE' OR TIMESTAMPDIFF(MINUTE, TIMESTAMP(s.work_date, sh.start_time), a.check_in) > 0 THEN 'LATE'
+             ELSE 'ON_TIME'
+           END AS progress_status,
+           CASE
+             WHEN a.check_in IS NULL THEN NULL
+             ELSE GREATEST(0, TIMESTAMPDIFF(MINUTE, TIMESTAMP(s.work_date, sh.start_time), a.check_in))
+           END AS late_minutes
+         FROM schedules s
+         LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
+         LEFT JOIN attendance a ON a.schedule_id = s.schedule_id
+         WHERE s.employee_id = ? AND s.status = 'PUBLISHED' AND s.work_date = ?
+         ORDER BY sh.start_time ASC, s.schedule_id ASC`,
+        [employee.employee_id, now.date],
+      ),
+      queryOrEmpty(
+        `SELECT id, month, year, COALESCE(status, 'PENDING') AS status
+         FROM availability_requests
+         WHERE (employee_id = ? OR user_id = ?)
+           AND COALESCE(status, 'PENDING') IN ('PENDING', 'EDIT_PENDING')
+         ORDER BY created_at DESC, id DESC
+         LIMIT 10`,
+        [employee.employee_id, userId],
+      ),
+      queryOrEmpty(
+        `SELECT swap_request_id, status, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
+         FROM shift_swap_requests
+         WHERE requester_employee_id = ? OR target_employee_id = ?
+         ORDER BY created_at DESC, swap_request_id DESC
+         LIMIT 10`,
+        [employee.employee_id, employee.employee_id],
+      ),
+      queryOrEmpty(
+        `SELECT late_request_id, status, requested_minutes
+         FROM attendance_late_requests
+         WHERE employee_id = ? AND status = 'PENDING'
+         ORDER BY created_at DESC, late_request_id DESC
+         LIMIT 10`,
+        [employee.employee_id],
+      ),
+    ]);
+
+  return {
+    employee: { employee_id: employee.employee_id, name: employee.name || "Bạn" },
+    now,
+    today_schedules: todaySchedules,
+    upcoming_schedules: upcomingSchedules,
+    active_schedules: todaySchedules.filter((schedule) => isScheduleActiveNow(schedule, now)),
+    today_attendance: todayAttendance,
+    pending_requests: {
+      availability: availabilityRequests,
+      swaps: swapRequests.filter((request) => request.status === "PENDING_TARGET"),
+      late: lateRequests,
+    },
+  };
+}
+
+function buildEmployeeChatAnswer(message, context) {
+  const question = normalizeVietnamese(message);
+  const restrictedTerms = [
+    "luong",
+    "salary",
+    "nhan vien khac",
+    "danh sach nhan vien",
+    "so dien thoai",
+    "email",
+    "dia chi",
+    "ai dang lam",
+    "ai lam viec",
+    "bao cao",
+    "thong ke",
+  ];
+
+  if (restrictedTerms.some((term) => question.includes(term))) {
+    return {
+      answer: "Mình chỉ hỗ trợ tra cứu lịch, chấm công và yêu cầu của chính bạn. Thông tin về lương, nhân sự hoặc báo cáo nội bộ không khả dụng trong chat này.",
+      highlights: [],
+      followups: ["Bạn có thể hỏi về ca hôm nay, lịch 7 ngày tới hoặc trạng thái yêu cầu của mình."],
+      actions: [],
+      data_sources: [],
+    };
+  }
+
+  const asksCurrentShift =
+    question.includes("dang lam") || question.includes("dang truc") || question.includes("hien tai");
+  if (asksCurrentShift) {
+    const active = context.active_schedules || [];
+    return {
+      answer: active.length
+        ? `Hiện tại (${context.now.time}), bạn đang có ${active.length} ca: ${active
+            .map(describePersonalSchedule)
+            .join("; ")}.`
+        : `Hiện tại (${context.now.time}), chưa thấy ca làm đã công bố nào của bạn đang diễn ra.`,
+      highlights: active.length ? ["Thời gian được tính theo múi giờ Việt Nam."] : [],
+      followups: ["Bạn có thể hỏi tiếp: Hôm nay tôi làm ca nào?"],
+      actions: [employeeChatAction("Xem lịch của tôi", "/shifts", "Mở lịch làm việc cá nhân")],
+      data_sources: buildChatDataSources(["active_schedules"]),
+    };
+  }
+
+  const asksAttendance =
+    question.includes("cham cong") || question.includes("check in") || question.includes("checkin") || question.includes("di tre");
+  if (asksAttendance) {
+    const records = context.today_attendance || [];
+    const lateCount = records.filter((record) => record.progress_status === "LATE").length;
+    const missingCount = records.filter((record) => record.progress_status === "NOT_CHECKED_IN").length;
+    return {
+      answer: records.length
+        ? `Hôm nay bạn có ${records.length} ca chấm công: ${records.filter((record) => record.check_in).length} đã check-in, ${lateCount} đi trễ và ${missingCount} chưa check-in.`
+        : "Hôm nay chưa có ca đã công bố để đối chiếu chấm công của bạn.",
+      highlights: records.map((record) => {
+        const status = record.progress_status === "LATE"
+          ? `trễ ${record.late_minutes || 0} phút`
+          : record.progress_status === "NOT_CHECKED_IN"
+            ? "chưa check-in"
+            : record.progress_status === "UPCOMING"
+              ? "ca sắp tới"
+              : "đúng giờ";
+        return `${record.shift_name || "Ca làm"} (${record.start_time}): ${status}.`;
+      }),
+      followups: ["Bạn có thể mở chấm công để kiểm tra hoặc cập nhật theo quy định của công ty."],
+      actions: [employeeChatAction("Xem chấm công", "/attendance", "Mở trang chấm công")],
+      data_sources: buildChatDataSources(["today_attendance"]),
+    };
+  }
+
+  const asksRequests =
+    question.includes("yeu cau") || question.includes("doi ca") || question.includes("lich ranh") || question.includes("xin tre");
+  if (asksRequests) {
+    const requests = context.pending_requests || {};
+    const total = (requests.availability?.length || 0) + (requests.swaps?.length || 0) + (requests.late?.length || 0);
+    return {
+      answer: total
+        ? `Bạn đang có ${total} yêu cầu chờ xử lý.`
+        : "Bạn hiện không có yêu cầu lịch rảnh, đổi ca hoặc xin trễ nào đang chờ xử lý.",
+      highlights: total
+        ? [
+            `Lịch rảnh: ${requests.availability?.length || 0}.`,
+            `Đổi ca: ${requests.swaps?.length || 0}.`,
+            `Xin trễ: ${requests.late?.length || 0}.`,
+          ]
+        : [],
+      followups: ["Bạn có thể mở trang lịch để gửi hoặc kiểm tra yêu cầu của mình."],
+      actions: [employeeChatAction("Xem lịch của tôi", "/shifts", "Mở lịch và yêu cầu cá nhân")],
+      data_sources: buildChatDataSources(["pending_requests"]),
+    };
+  }
+
+  const asksToday =
+    question.includes("hom nay") || question.includes("lich cua toi") || question.includes("ca cua toi");
+  if (asksToday) {
+    const schedules = context.today_schedules || [];
+    return {
+      answer: schedules.length
+        ? `Hôm nay (${context.now.date}) bạn có ${schedules.length} ca: ${schedules
+            .map(describePersonalSchedule)
+            .join("; ")}.`
+        : `Hôm nay (${context.now.date}) chưa có ca làm đã công bố cho bạn.`,
+      highlights: schedules.length ? ["Lịch chỉ hiển thị các ca đã được công bố."] : [],
+      followups: ["Bạn có thể hỏi tiếp: Lịch 7 ngày tới của tôi thế nào?"],
+      actions: [employeeChatAction("Xem lịch của tôi", "/shifts", "Mở lịch làm việc cá nhân")],
+      data_sources: buildChatDataSources(["today_schedules"]),
+    };
+  }
+
+  const asksUpcoming =
+    question.includes("tuan") || question.includes("sap toi") || question.includes("7 ngay") || question.includes("ngay toi");
+  if (asksUpcoming) {
+    const schedules = context.upcoming_schedules || [];
+    return {
+      answer: schedules.length
+        ? `Trong 7 ngày tới, bạn có ${schedules.length} ca đã được công bố.`
+        : "Bạn chưa có ca làm đã công bố trong 7 ngày tới.",
+      highlights: schedules.slice(0, 8).map(describePersonalSchedule),
+      followups: ["Bạn có thể mở lịch để xem toàn bộ các ca của mình."],
+      actions: [employeeChatAction("Xem lịch của tôi", "/shifts", "Mở lịch làm việc cá nhân")],
+      data_sources: buildChatDataSources(["upcoming_schedules"]),
+    };
+  }
+
+  return {
+    answer: `Mình có thể giúp bạn tra cứu thông tin cá nhân, ${context.employee.name}: lịch hôm nay, ca đang diễn ra, lịch 7 ngày tới, chấm công hôm nay và yêu cầu đang chờ xử lý.`,
+    highlights: ["Chat này không hiển thị thông tin nhân sự, lương hoặc dữ liệu quản trị."],
+    followups: [
+      "Hôm nay tôi làm ca nào?",
+      "Tình hình chấm công hôm nay của tôi thế nào?",
+      "Tôi có yêu cầu nào đang chờ xử lý không?",
+    ],
+    actions: [],
+    data_sources: [],
+  };
+}
+
+export async function answerEmployeeChat({ message, user }) {
+  if (user?.role !== "EMPLOYEE") {
+    throw employeeChatError("Chỉ nhân viên mới có thể dùng trợ lý cá nhân.", 403);
+  }
+  const context = await getEmployeeChatContext(user);
+  return buildEmployeeChatAnswer(message, context);
+}
+
 export async function getScheduleContext({ month, year }) {
   const hasMonth = month && month !== "all";
   const hasYear = year && year !== "all";
@@ -1361,6 +2062,9 @@ export async function getScheduleContext({ month, year }) {
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const publishedWhereClause = `WHERE s.status = 'PUBLISHED'${
+    conditions.length ? ` AND ${conditions.join(" AND ")}` : ""
+  }`;
   const schedules = await queryOrEmpty(
     `SELECT
        s.schedule_id,
@@ -1377,15 +2081,48 @@ export async function getScheduleContext({ month, year }) {
      LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
      ${whereClause}
      ORDER BY s.work_date DESC, sh.start_time ASC
-     LIMIT 120`,
+     LIMIT 1000`,
     params,
   );
+
+  const [scheduleWorkload, shiftWorkload] = await Promise.all([
+    queryOrEmpty(
+      `SELECT
+         s.employee_id,
+         e.name AS employee_name,
+         COUNT(*) AS shift_count,
+         COUNT(DISTINCT s.work_date) AS work_day_count
+       FROM schedules s
+       LEFT JOIN employees e ON s.employee_id = e.employee_id
+       ${publishedWhereClause}
+       GROUP BY s.employee_id, e.name
+       ORDER BY shift_count DESC, employee_name ASC
+       LIMIT 200`,
+      params,
+    ),
+    queryOrEmpty(
+      `SELECT
+         s.shift_id,
+         sh.shift_name,
+         TIME_FORMAT(sh.start_time, '%H:%i') AS start_time,
+         TIME_FORMAT(sh.end_time, '%H:%i') AS end_time,
+         COUNT(*) AS employee_count,
+         COUNT(DISTINCT s.work_date) AS work_day_count
+       FROM schedules s
+       LEFT JOIN shifts sh ON s.shift_id = sh.shift_id
+       ${publishedWhereClause}
+       GROUP BY s.shift_id, sh.shift_name, sh.start_time, sh.end_time
+       ORDER BY employee_count DESC, sh.start_time ASC
+       LIMIT 80`,
+      params,
+    ),
+  ]);
 
   const employees = await queryOrEmpty(
     `SELECT employee_id, name, email
      FROM employees
      ORDER BY name ASC
-     LIMIT 80`,
+     LIMIT 500`,
   );
 
   const settings = await queryOrEmpty("SELECT * FROM schedule_settings LIMIT 1");
@@ -1512,6 +2249,8 @@ export async function getScheduleContext({ month, year }) {
     settings: settings[0] || {},
     employees,
     schedules,
+    schedule_workload: scheduleWorkload,
+    shift_workload: shiftWorkload,
     active_schedules: activeSchedules,
     today_schedules: todaySchedules,
     today_attendance: todayAttendance,
@@ -1622,8 +2361,8 @@ export async function answerManagerChat({
     requester,
     operational,
     ...context,
-    employees: (context.employees || []).slice(0, 30),
-    schedules: (context.schedules || []).slice(0, 45),
+    employees: (context.employees || []).slice(0, 500),
+    schedules: (context.schedules || []).slice(0, 1000),
     today_schedules: context.today_schedules || [],
     today_attendance: context.today_attendance || [],
     today_late_attendance: context.today_late_attendance || [],
@@ -1631,7 +2370,9 @@ export async function answerManagerChat({
     availability: (context.availability || []).slice(0, 30),
     tasks,
   };
-  const fallback = buildChatFallback(message, compactContext);
+  const fallback =
+    buildDataReasoningFallback(message, compactContext) ||
+    buildChatFallback(message, compactContext);
 
   if (shouldUseImmediateLocalAnswer(message)) {
     return hideProviderDetails({

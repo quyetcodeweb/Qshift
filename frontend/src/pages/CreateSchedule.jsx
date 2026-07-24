@@ -30,6 +30,7 @@ import {
 } from "@material-tailwind/react";
 import AutoScheduleModal from "../components/AutoScheduleModal";
 import AiScheduleAnalysis from "../components/AiScheduleAnalysis";
+import OperationalPageHeader from "../components/OperationalPageHeader";
 import { API_URL } from "../services/api";
 
 const schedulePageSize = 8;
@@ -738,21 +739,11 @@ export default function CreateSchedule() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Typography
-            variant="h4"
-            className="font-bold tracking-tight text-gray-950"
-          >
-            Tạo lịch làm
-          </Typography>
-          <Typography className="mt-1 text-sm text-gray-600">
-            Quản lý lịch làm thủ công, danh mục ca làm và tự động xếp lịch trong
-            một màn hình.
-          </Typography>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
+      <OperationalPageHeader
+        title="Tạo lịch làm"
+        description="Điều phối lịch thủ công, danh mục ca và tự động xếp lịch trong một màn hình."
+        actions={
+          <div className="flex flex-wrap gap-2">
           <Button
             variant="outlined"
             onClick={() => setSettingsOpen(true)}
@@ -768,8 +759,9 @@ export default function CreateSchedule() {
             <SparklesIcon className="h-5 w-5" />
             Tự động xếp
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <AiScheduleAnalysis month={viewMonth} year={viewYear} />
 

@@ -1,6 +1,7 @@
 import {
   analyzeRequest,
   analyzeSchedule,
+  answerEmployeeChat,
   answerManagerChat,
 } from "../services/ai.service.js";
 
@@ -49,5 +50,20 @@ export async function managerChatController(req, res) {
   } catch (error) {
     console.error("[ai.managerChat]", error);
     res.status(500).json({ message: error.message });
+  }
+}
+
+export async function employeeChatController(req, res) {
+  try {
+    const message = String(req.body?.message || "").trim();
+    if (!message) {
+      return res.status(400).json({ message: "message is required" });
+    }
+
+    const result = await answerEmployeeChat({ message, user: req.user });
+    res.json(result);
+  } catch (error) {
+    console.error("[ai.employeeChat]", error);
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 }
