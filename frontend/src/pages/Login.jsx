@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   ArrowRightIcon,
   ClockIcon,
@@ -8,6 +9,16 @@ import {
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { API_URL } from "../services/api";
+import loginIllustration from "../assets/imagelogin.png";
+import loginIllustrationReplacement from "../assets/imageloginreplace.png";
+
+const SECRET_TAP_COUNT = 15;
+const SECRET_TAP_WINDOW_MS = 8000;
+const PARTICLES_PER_TAP = 4;
+const MAX_ACTIVE_PARTICLES = 64;
+const PARTICLE_LIFETIME_MS = 1220;
+const REPLACEMENT_BURST_COUNT = 10;
+const MotionImage = motion.img;
 
 function loginErrorMessage(error) {
   const status = Number(error.response?.status || 0);
@@ -40,10 +51,91 @@ export default function Login() {
   const [form, setForm] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [illustrationParticles, setIllustrationParticles] = useState([]);
+  const [isIllustrationReplaced, setIsIllustrationReplaced] = useState(false);
+  const tapTimesRef = useRef([]);
+  const particleIdRef = useRef(0);
+  const particleTimersRef = useRef(new Set());
+  const hasReplacedIllustrationRef = useRef(false);
+  const reduceMotion = useReducedMotion();
+
+  useEffect(() => () => {
+    particleTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+  }, []);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (error) setError("");
+  };
+
+  const spawnIllustrationParticles = (particles) => {
+    setIllustrationParticles((current) => [...current, ...particles].slice(-MAX_ACTIVE_PARTICLES));
+    particles.forEach((particle) => {
+      const timer = window.setTimeout(() => {
+        particleTimersRef.current.delete(timer);
+        setIllustrationParticles((current) => current.filter((item) => item.id !== particle.id));
+      }, PARTICLE_LIFETIME_MS);
+      particleTimersRef.current.add(timer);
+    });
+  };
+
+  const handleIllustrationClick = (event) => {
+    if (hasReplacedIllustrationRef.current) return;
+
+    const now = Date.now();
+    const imageBounds = event.currentTarget.getBoundingClientRect();
+    const isKeyboardClick = event.detail === 0;
+    const clickX = isKeyboardClick ? imageBounds.left + imageBounds.width / 2 : event.clientX;
+    const clickY = isKeyboardClick ? imageBounds.top + imageBounds.height / 2 : event.clientY;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const originX = Math.min(viewportWidth - 6, Math.max(6, clickX));
+    const originY = Math.min(viewportHeight - 6, Math.max(6, clickY));
+    const horizontalTravel = Math.max(680, viewportWidth * 0.92);
+    const verticalTravel = Math.max(480, viewportHeight * 0.78);
+    tapTimesRef.current = tapTimesRef.current.filter((time) => now - time < SECRET_TAP_WINDOW_MS);
+    tapTimesRef.current.push(now);
+
+    if (!reduceMotion) {
+      const particles = Array.from({ length: PARTICLES_PER_TAP }, () => ({
+        id: particleIdRef.current += 1,
+        originX: Math.min(viewportWidth - 6, Math.max(6, originX + (Math.random() - 0.5) * 20)),
+        originY: Math.min(viewportHeight - 6, Math.max(6, originY + (Math.random() - 0.5) * 20)),
+        offsetX: Math.round((Math.random() - 0.24) * horizontalTravel),
+        offsetY: Math.round((Math.random() - 0.52) * verticalTravel),
+        rotation: Math.round((Math.random() - 0.5) * 220),
+        size: 56 + Math.round(Math.random() * 32),
+      }));
+      spawnIllustrationParticles(particles);
+    }
+
+    if (tapTimesRef.current.length >= SECRET_TAP_COUNT) {
+      hasReplacedIllustrationRef.current = true;
+      tapTimesRef.current = [];
+
+      if (!reduceMotion) {
+        const burstOriginX = imageBounds.left + imageBounds.width / 2;
+        const burstOriginY = imageBounds.top + imageBounds.height / 2;
+        const burstDistance = Math.max(280, Math.max(viewportWidth, viewportHeight) * 0.46);
+        const replacementParticles = Array.from({ length: REPLACEMENT_BURST_COUNT }, (_, index) => {
+          const angle = ((Math.PI * 2 * index) / REPLACEMENT_BURST_COUNT) + (Math.random() - 0.5) * 0.18;
+          const distance = burstDistance * (0.72 + Math.random() * 0.28);
+
+          return {
+            id: particleIdRef.current += 1,
+            originX: burstOriginX,
+            originY: burstOriginY,
+            offsetX: Math.round(Math.cos(angle) * distance),
+            offsetY: Math.round(Math.sin(angle) * distance),
+            rotation: Math.round((Math.random() - 0.5) * 300),
+            size: 54 + Math.round(Math.random() * 26),
+          };
+        });
+        spawnIllustrationParticles(replacementParticles);
+      }
+
+      setIsIllustrationReplaced(true);
+    }
   };
 
   const handleLogin = async () => {
@@ -76,23 +168,41 @@ export default function Login() {
       <div className="pointer-events-none absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-sky-100/70 blur-3xl" />
 
       <div className="relative grid w-full max-w-5xl overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_24px_64px_rgba(30,64,175,0.12)] lg:grid-cols-[0.92fr_1.08fr]">
-        <section className="relative hidden overflow-hidden border-r border-blue-100 bg-blue-50 p-9 lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute left-0 top-0 h-full w-1 bg-blue-700" />
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-white/80 px-3 py-2 text-xs font-extrabold tracking-[0.08em] text-blue-800">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              CỔNG VẬN HÀNH
+        <section className="relative hidden min-h-[38rem] overflow-hidden border-r border-blue-100 bg-blue-50 lg:flex lg:flex-col">
+          <div className="relative z-10 px-9 pt-9">
+            <div className="text-[5.8rem] font-black leading-[0.84] tracking-[-0.1em] text-gray-950 xl:text-[6.75rem]">
+              <span className="text-blue-700">Q</span><span>Shift</span>
             </div>
-            <h1 className="mt-8 max-w-sm text-4xl font-black leading-tight tracking-tight text-gray-950">
-              Quản lý ca làm với thông tin luôn rõ ràng.
-            </h1>
-            <p className="mt-4 max-w-sm text-sm font-medium leading-6 text-gray-600">
-              Đăng nhập để tiếp tục theo dõi lịch làm, nhân sự và các công việc vận hành của bạn.
-            </p>
           </div>
-          <div className="rounded-2xl border border-blue-100 bg-white/80 p-4">
-            <div className="text-xs font-extrabold uppercase tracking-[0.1em] text-blue-700">Qshift</div>
-            <div className="mt-1 text-sm font-semibold leading-6 text-gray-700">Một nơi làm việc gọn gàng cho lịch, chấm công và phối hợp đội ngũ.</div>
+          <div className="absolute inset-x-0 bottom-0 top-48 overflow-hidden bg-white">
+              <img
+                src={loginIllustration}
+                alt="Khoảnh khắc vui vẻ của đội ngũ QShift"
+                className="block h-full w-full object-cover object-center"
+              />
+              <button
+                type="button"
+                onClick={handleIllustrationClick}
+                disabled={isIllustrationReplaced}
+                aria-label={isIllustrationReplaced ? "Ảnh minh họa QShift" : "Ảnh minh họa QShift, bấm để tương tác"}
+                className="absolute inset-0 block h-full w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left transition active:brightness-[0.98] focus-visible:outline focus-visible:outline-4 focus-visible:outline-blue-600 focus-visible:outline-offset-[-4px] disabled:cursor-default"
+              >
+                <AnimatePresence>
+                  {isIllustrationReplaced && (
+                    <MotionImage
+                      src={loginIllustrationReplacement}
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                      initial={reduceMotion ? false : { opacity: 0, scale: 1.035 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={reduceMotion ? undefined : { opacity: 0, scale: 0.975 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.46, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute inset-0 block h-full w-full object-cover object-center"
+                    />
+                  )}
+                </AnimatePresence>
+              </button>
           </div>
         </section>
 
@@ -143,6 +253,37 @@ export default function Login() {
             <p className="mt-4 flex items-center gap-2 text-xs font-medium text-gray-500"><ClockIcon className="h-4 w-4 text-blue-600" />Nếu chờ lâu hãy kiên nhẫn nhé!!</p>
           </div>
         </section>
+      </div>
+
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-30 overflow-hidden">
+        <AnimatePresence>
+          {illustrationParticles.map((particle) => (
+            <MotionImage
+              key={particle.id}
+              src={loginIllustration}
+              alt=""
+              draggable={false}
+              initial={{ opacity: 0, scale: 0.25, x: 0, y: 0, rotate: 0 }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                scale: [0.25, 1, 0.82],
+                x: particle.offsetX,
+                y: particle.offsetY,
+                rotate: particle.rotation,
+              }}
+              transition={{ duration: 1.16, times: [0, 0.16, 0.58, 1], ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                left: particle.originX,
+                top: particle.originY,
+                width: particle.size,
+                height: particle.size,
+                marginLeft: -particle.size / 2,
+                marginTop: -particle.size / 2,
+              }}
+              className="absolute rounded-xl object-cover shadow-[0_10px_18px_rgba(29,78,216,0.22)] will-change-transform"
+            />
+          ))}
+        </AnimatePresence>
       </div>
     </main>
   );
