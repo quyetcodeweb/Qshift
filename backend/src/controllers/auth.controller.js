@@ -7,13 +7,12 @@ export const login = async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ message: "Missing data" });
+      return res.status(400).json({ message: "Vui lòng nhập tên đăng nhập và mật khẩu" });
     }
 
     if (!process.env.JWT_SECRET) {
       return res.status(500).json({
-        message: "Server chưa cấu hình JWT_SECRET",
-        detail: "Thêm JWT_SECRET vào file backend/.env rồi restart backend.",
+        message: "Lỗi hệ thống",
       });
     }
 
@@ -23,7 +22,7 @@ export const login = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(400).json({ message: "User not found" });
+      return res.status(400).json({ message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
     const user = rows[0];
@@ -34,14 +33,14 @@ export const login = async (req, res) => {
 
     if (!user.password) {
       return res.status(500).json({
-        message: "Tài khoản chưa có mật khẩu hợp lệ",
+        message: "Lỗi hệ thống",
       });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(400).json({ message: "Wrong password" });
+      return res.status(400).json({ message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
     if (user.role === "EMPLOYEE") {
@@ -66,8 +65,7 @@ export const login = async (req, res) => {
   } catch (err) {
     console.error("LOGIN ERROR:", err);
     res.status(500).json({
-      message: "Không thể đăng nhập",
-      detail: err.message,
+      message: "Lỗi hệ thống",
     });
   }
 };
