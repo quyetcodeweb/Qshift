@@ -120,6 +120,20 @@ export const findPendingFillRequest = async (user_id, month, year) => {
   return rows[0] || null;
 };
 
+export const findActiveFillRequest = async (user_id) => {
+  const [rows] = await db.query(
+    `SELECT id, month, year, status
+     FROM availability_requests
+     WHERE user_id=?
+       AND COALESCE(status, 'PENDING') IN ('PENDING', 'EDIT_APPROVED')
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [user_id],
+  );
+
+  return rows[0] || null;
+};
+
 export const findLatestRequest = async (user_id, month, year) => {
   const [rows] = await db.query(
     `SELECT *
@@ -133,6 +147,23 @@ export const findLatestRequest = async (user_id, month, year) => {
   );
 
   return rows[0] || null;
+};
+
+// This is the server-side source of truth for the availability-page access.
+// Browser storage and a hand-written URL must not grant the employee access.
+export const getEmployeeRequestAccess = async (user_id, month, year) => {
+  const request = await findLatestRequest(user_id, month, year);
+  if (!request) return { allowed: false, request: null };
+
+  const status = request.status || "PENDING";
+  if (["PENDING", "EDIT_APPROVED"].includes(status)) {
+    return { allowed: true, request };
+  }
+
+  const canReview = ["SUBMITTED", "APPROVED", "REJECTED"].includes(status)
+    && await isWithinEditWindow(request.id);
+
+  return { allowed: canReview, request };
 };
 
 export const updateRequestDataAndStatus = async (id, data, status) => {

@@ -14,6 +14,15 @@ export const getAvailability = async (req, res) => {
     const { employee_id } = req.params;
     const { month, year } = req.query;
 
+    if (req.user?.role === "EMPLOYEE") {
+      await service.assertEmployeeAvailabilityAccess(
+        req.user.user_id,
+        employee_id,
+        Number(month),
+        Number(year),
+      );
+    }
+
     console.log(`📥 GET availability: employee_id=${employee_id}, month=${month}, year=${year}`);
 
     const data = await service.get(employee_id, month, year);
@@ -24,7 +33,7 @@ export const getAvailability = async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("❌ GET availability error:", err.message);
-    res.status(500).json({ message: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 };
 
@@ -39,6 +48,10 @@ export const requestAvailability = async (req, res) => {
       return res.status(400).json({ message: "user_id not found in token" });
     }
 
+    if (req.user?.role !== "EMPLOYEE") {
+      return res.status(403).json({ message: "Only employees can submit availability" });
+    }
+
     if (!month || !year) {
       return res.status(400).json({ message: "month and year are required" });
     }
@@ -48,7 +61,7 @@ export const requestAvailability = async (req, res) => {
     res.json({ message: "Request sent", request_id: requestId });
   } catch (err) {
     console.error("❌ requestAvailability error:", err.message);
-    res.status(500).json({ message: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 };
 
@@ -108,6 +121,24 @@ export const getMyAvailabilityRequest = async (req, res) => {
     res.json(request || {});
   } catch (err) {
     console.error("Get my availability request error:", err.message);
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
+};
+
+export const getMyActiveFillRequest = async (req, res) => {
+  try {
+    if (req.user?.role !== "EMPLOYEE") {
+      return res.json({ active: false });
+    }
+
+    const request = await service.getMyActiveFillRequest(req.user.user_id);
+    res.json({
+      active: Boolean(request),
+      month: request?.month || null,
+      year: request?.year || null,
+    });
+  } catch (err) {
+    console.error("Get active availability request error:", err.message);
     res.status(500).json({ message: err.message });
   }
 };
@@ -119,6 +150,10 @@ export const requestEditAvailability = async (req, res) => {
 
     if (!user_id) {
       return res.status(400).json({ message: "user_id not found in token" });
+    }
+
+    if (req.user?.role !== "EMPLOYEE") {
+      return res.status(403).json({ message: "Only employees can submit availability" });
     }
 
     if (!month || !year) {
@@ -134,7 +169,7 @@ export const requestEditAvailability = async (req, res) => {
     res.json({ message: "Edit request sent", request_id: requestId });
   } catch (err) {
     console.error("Request edit availability error:", err.message);
-    res.status(500).json({ message: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 };
 

@@ -10,6 +10,26 @@ export const get = async (employee_id, month, year) => {
   return await model.get(employee_id, month, year);
 };
 
+const createAccessError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 403;
+  return error;
+};
+
+export const assertEmployeeAvailabilityAccess = async (userId, employeeId, month, year) => {
+  const employee = await model.getEmployeeByUserId(userId);
+  if (!employee?.employee_id || Number(employee.employee_id) !== Number(employeeId)) {
+    throw createAccessError("Bạn không có quyền xem lịch rảnh của nhân viên này");
+  }
+
+  const access = await model.getEmployeeRequestAccess(userId, month, year);
+  if (!access.allowed) {
+    throw createAccessError("Bạn chỉ có thể mở lịch rảnh khi có yêu cầu hợp lệ từ admin");
+  }
+
+  return access.request;
+};
+
 export const requestAvailability = async (user_id, month, year, data) => {
   console.log(
     `Creating availability submission for user ${user_id}, ${month}/${year}, ${data.length} items`
@@ -21,13 +41,13 @@ export const requestAvailability = async (user_id, month, year, data) => {
   }
 
   const latestRequest = await model.findLatestRequest(user_id, month, year);
-  const editableStatuses = new Set(["PENDING", "EDIT_APPROVED", null, undefined]);
+  const editableStatuses = new Set(["PENDING", "EDIT_APPROVED"]);
 
-  if (latestRequest && !editableStatuses.has(latestRequest.status)) {
-    throw new Error("Lịch rảnh đã được lưu. Vui lòng gửi yêu cầu sửa nếu cần cập nhật.");
+  if (!latestRequest || !editableStatuses.has(latestRequest.status || "PENDING")) {
+    throw createAccessError("Bạn chỉ có thể lưu lịch rảnh khi có yêu cầu đang hiệu lực từ admin");
   }
 
-  const requestId = latestRequest?.id || await model.createRequest(user_id, month, year, data);
+  const requestId = latestRequest.id;
 
   await model.save({
     employee_id: employee.employee_id,
@@ -36,11 +56,7 @@ export const requestAvailability = async (user_id, month, year, data) => {
     year,
   });
 
-  if (latestRequest) {
-    await model.updateRequestDataAndStatus(latestRequest.id, data, "SUBMITTED");
-  } else {
-    await model.updateRequestDataAndStatus(requestId, data, "SUBMITTED");
-  }
+  await model.updateRequestDataAndStatus(requestId, data, "SUBMITTED");
 
   await model.deleteNotificationsByType(requestId, ["AVAILABILITY_SUBMITTED"]);
 
@@ -115,8 +131,8 @@ export const sendFillRequestToEmployees = async (month, year, employeeId = null)
 };
 
 export const getMyAvailabilityRequest = async (user_id, month, year) => {
-  const request = await model.findLatestRequest(user_id, month, year);
-  if (!request) return null;
+  const { request, allowed } = await model.getEmployeeRequestAccess(user_id, month, year);
+  if (!request) return { access_granted: false };
 
   return {
     id: request.id,
@@ -129,7 +145,12 @@ export const getMyAvailabilityRequest = async (user_id, month, year) => {
     edit_requested_at: request.edit_requested_at,
     edit_approved_at: request.edit_approved_at,
     data: request.data,
+    access_granted: allowed,
   };
+};
+
+export const getMyActiveFillRequest = async (user_id) => {
+  return await model.findActiveFillRequest(user_id);
 };
 
 export const requestEditAvailability = async (user_id, month, year) => {

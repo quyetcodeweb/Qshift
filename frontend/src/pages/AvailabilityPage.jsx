@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useLocation } from "react-router-dom";
 import {
   Button,
   Card,
@@ -69,13 +70,14 @@ function formatRemainingTime(milliseconds) {
 }
 
 export default function AvailabilityPage() {
+  const location = useLocation();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user?.role;
   const userId = user?.user_id;
   const [employeeAccess, setEmployeeAccess] = useState(() => readAccess());
-  const searchParams = new URLSearchParams(window.location.search);
-  const requestedMonth = Number(employeeAccess?.month || searchParams.get("month"));
-  const requestedYear = Number(employeeAccess?.year || searchParams.get("year"));
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const requestedMonth = Number(searchParams.get("month") || employeeAccess?.month);
+  const requestedYear = Number(searchParams.get("year") || employeeAccess?.year);
 
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
@@ -92,13 +94,14 @@ export default function AvailabilityPage() {
   const [requestMeta, setRequestMeta] = useState(null);
   const [sendingFillRequest, setSendingFillRequest] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [employeeAccessState, setEmployeeAccessState] = useState("checking");
 
   const isEmployee = role === "EMPLOYEE";
   const isAdmin = role === "ADMIN";
   const canEmployeeFill = useMemo(() => {
     if (!isEmployee) return true;
-    return Boolean(employeeAccess?.month && employeeAccess?.year);
-  }, [employeeAccess?.month, employeeAccess?.year, isEmployee]);
+    return employeeAccessState === "granted";
+  }, [employeeAccessState, isEmployee]);
 
   const selectedEmployee = useMemo(
     () => employees.find((employee) => String(employee.employee_id) === String(employeeId)),
@@ -278,11 +281,45 @@ export default function AvailabilityPage() {
   }, [fetchInit]);
 
   useEffect(() => {
-    if (isEmployee && employeeAccess?.month && employeeAccess?.year) {
+    if (
+      isEmployee &&
+      !searchParams.get("month") &&
+      !searchParams.get("year") &&
+      employeeAccess?.month &&
+      employeeAccess?.year
+    ) {
       setMonth(Number(employeeAccess.month));
       setYear(Number(employeeAccess.year));
     }
-  }, [employeeAccess?.month, employeeAccess?.year, isEmployee]);
+  }, [employeeAccess?.month, employeeAccess?.year, isEmployee, searchParams]);
+
+  useEffect(() => {
+    if (!isEmployee || !employeeId) {
+      if (!isEmployee) setEmployeeAccessState("granted");
+      return;
+    }
+
+    let isCurrent = true;
+    setEmployeeAccessState("checking");
+
+    axios
+      .get(`${API_URL}/availability/request/me?month=${month}&year=${year}`, {
+        headers: authHeaders(),
+      })
+      .then(({ data }) => {
+        if (!isCurrent) return;
+        setEmployeeAccessState(data?.id && data?.access_granted ? "granted" : "denied");
+      })
+      .catch((error) => {
+        if (!isCurrent) return;
+        console.error("Availability access check failed:", error.response?.data || error.message);
+        setEmployeeAccessState("denied");
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [employeeId, isEmployee, month, year]);
 
   useEffect(() => {
     if (!shifts.length) return;
@@ -459,6 +496,14 @@ export default function AvailabilityPage() {
       setSendingFillRequest("");
     }
   };
+
+  if (isEmployee && employeeAccessState === "checking") {
+    return (
+      <div className="flex min-h-[280px] items-center justify-center p-6">
+        <Spinner className="h-8 w-8 text-blue-600" />
+      </div>
+    );
+  }
 
   if (isEmployee && !canEmployeeFill) {
     return (

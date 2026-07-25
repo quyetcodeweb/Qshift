@@ -35,6 +35,61 @@ function ensureLateRequestTableOnce() {
   return lateRequestTablePromise;
 }
 
+function requiresManualAction(notification) {
+  const type = String(notification.type || "").toUpperCase();
+  const availabilityStatus = String(notification.availability_status || "").toUpperCase();
+  const swapStatus = String(notification.swap_status || "").toUpperCase();
+  const lateStatus = String(notification.late_request_status || "").toUpperCase();
+  const payrollStatus = String(notification.payroll_status || "").toUpperCase();
+
+  if (["AVAILABILITY_FILL_REQUEST", "AVAILABILITY_FILL_REMINDER"].includes(type)) {
+    return availabilityStatus === "PENDING";
+  }
+
+  if (type === "AVAILABILITY_REQUEST") return availabilityStatus === "PENDING";
+  if (type === "AVAILABILITY_EDIT_REQUEST") return availabilityStatus === "EDIT_PENDING";
+  if (["SHIFT_SWAP_TARGET_REQUEST", "SHIFT_SWAP_ADMIN_REQUEST"].includes(type)) {
+    return swapStatus === "PENDING_TARGET";
+  }
+  if (type === "SHIFT_SWAP_APPROVED_ADMIN") return swapStatus === "APPROVED";
+  if (type === "ATTENDANCE_LATE_REQUEST") return lateStatus === "PENDING";
+  if (type === "PAYROLL_FEEDBACK") return payrollStatus === "PENDING";
+
+  return false;
+}
+
+async function getNotificationActionStates(userId, notificationIds = null) {
+  await ensureLateRequestTableOnce();
+
+  const ids = Array.isArray(notificationIds)
+    ? [...new Set(notificationIds.map(Number).filter(Boolean))]
+    : [];
+  const idClause = ids.length
+    ? ` AND n.notification_id IN (${ids.map(() => "?").join(",")})`
+    : "";
+  const [rows] = await db.query(
+    `SELECT n.notification_id,
+            n.type,
+            n.is_read,
+            ar.status AS availability_status,
+            sr.status AS swap_status,
+            lr.status AS late_request_status,
+            pf.status AS payroll_status
+       FROM notifications n
+       LEFT JOIN availability_requests ar ON n.ref_id = ar.id
+       LEFT JOIN shift_swap_requests sr ON n.ref_id = sr.swap_request_id
+       LEFT JOIN attendance_late_requests lr ON n.ref_id = lr.late_request_id
+       LEFT JOIN payroll_feedback pf ON n.ref_id = pf.feedback_id
+       WHERE n.user_id=?${idClause}`,
+    [userId, ...ids],
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    requires_manual_action: requiresManualAction(row),
+  }));
+}
+
 export const sendAvailabilityRequest = async (req, res) => {
   try {
     const { month, year, employee_id } = req.body;
@@ -97,7 +152,7 @@ export const getNotifications = async (req, res) => {
             n.ref_id,
             DATE_FORMAT(CONVERT_TZ(n.created_at, '+00:00', '+07:00'), '%Y-%m-%d %H:%i:%s') as created_at,
             e.name as employee_name,
-            ar.month, ar.year, ar.data as availability_data, ar.status as request_status,
+            ar.month, ar.year, ar.data as availability_data, ar.status as request_status, ar.status as availability_status,
             pf.feedback_id as payroll_feedback_id,
             pf.subject as payroll_subject,
             pf.content as payroll_content,
@@ -152,14 +207,35 @@ export const getNotifications = async (req, res) => {
     params
   );
 
-  res.json(rows);
+  res.json(
+    rows.map((row) => ({
+      ...row,
+      requires_manual_action: requiresManualAction(row),
+      can_delete: !requiresManualAction(row),
+    })),
+  );
 };
 
 export const markRead = async (req, res) => {
-  await db.query(
-    "UPDATE notifications SET is_read=1 WHERE notification_id=?",
-    [req.params.id]
-  );
+  const userId = Number(req.headers["user-id"]);
+  if (!userId) {
+    return res.status(400).json({ message: "Missing user_id" });
+  }
+
+  const [notification] = await getNotificationActionStates(userId, [req.params.id]);
+  if (!notification) {
+    return res.status(404).json({ message: "Notification not found" });
+  }
+  if (notification.requires_manual_action) {
+    return res.status(409).json({
+      message: "Thông báo này cần được xử lý bằng nút hành động trước.",
+    });
+  }
+
+  await db.query("UPDATE notifications SET is_read=1 WHERE user_id=? AND notification_id=?", [
+    userId,
+    req.params.id,
+  ]);
 
   res.json({ message: "ok" });
 };
@@ -171,11 +247,29 @@ export const markAllRead = async (req, res) => {
     return res.status(400).json({ message: "Missing user_id" });
   }
 
-  await db.query("UPDATE notifications SET is_read=1 WHERE user_id=?", [
-    user_id,
-  ]);
+  const notifications = await getNotificationActionStates(user_id);
+  const protectedIds = notifications
+    .filter((notification) => notification.requires_manual_action)
+    .map((notification) => notification.notification_id);
 
-  res.json({ message: "ok" });
+  let result;
+  if (protectedIds.length) {
+    const placeholders = protectedIds.map(() => "?").join(",");
+    [result] = await db.query(
+      `UPDATE notifications
+       SET is_read=1
+       WHERE user_id=? AND notification_id NOT IN (${placeholders})`,
+      [user_id, ...protectedIds],
+    );
+  } else {
+    [result] = await db.query("UPDATE notifications SET is_read=1 WHERE user_id=?", [user_id]);
+  }
+
+  res.json({
+    message: "ok",
+    marked: result.affectedRows || 0,
+    skipped_manual_action: protectedIds.length,
+  });
 };
 
 export const deleteNotifications = async (req, res) => {
@@ -193,11 +287,26 @@ export const deleteNotifications = async (req, res) => {
       return res.status(400).json({ message: "Missing notification ids" });
     }
 
+    const notificationStates = await getNotificationActionStates(user_id, ids);
+    const blockedIds = notificationStates
+      .filter((notification) => notification.requires_manual_action)
+      .map((notification) => notification.notification_id);
+    const deletableIds = notificationStates
+      .filter((notification) => !notification.requires_manual_action)
+      .map((notification) => notification.notification_id);
+
+    if (!deletableIds.length) {
+      return res.status(409).json({
+        message: "Chỉ có thể xóa thông báo sau khi yêu cầu liên quan đã được xử lý.",
+        blocked_ids: blockedIds,
+      });
+    }
+
     let deleted = 0;
     const batchSize = 500;
 
-    for (let index = 0; index < ids.length; index += batchSize) {
-      const batch = ids.slice(index, index + batchSize);
+    for (let index = 0; index < deletableIds.length; index += batchSize) {
+      const batch = deletableIds.slice(index, index + batchSize);
       const placeholders = batch.map(() => "?").join(",");
       const [result] = await db.query(
         `DELETE FROM notifications WHERE user_id=? AND notification_id IN (${placeholders})`,
@@ -206,7 +315,7 @@ export const deleteNotifications = async (req, res) => {
       deleted += result.affectedRows || 0;
     }
 
-    res.json({ message: "ok", deleted });
+    res.json({ message: "ok", deleted, blocked_ids: blockedIds });
   } catch (err) {
     console.error("DELETE NOTIFICATIONS ERROR:", err);
     res.status(500).json({

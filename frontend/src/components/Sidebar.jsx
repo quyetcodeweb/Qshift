@@ -45,19 +45,6 @@ function getStoredUser() {
   }
 }
 
-function readAvailabilityAccess() {
-  try {
-    const access = JSON.parse(localStorage.getItem("availabilityFillRequest"));
-    if (access?.expiresAt && Date.now() > Number(access.expiresAt)) {
-      localStorage.removeItem("availabilityFillRequest");
-      return null;
-    }
-    return access;
-  } catch {
-    return null;
-  }
-}
-
 function UserAvatar({ user, profile }) {
   const name = profile?.name || user?.employee_name || user?.username || "Q";
   const avatarUrl = profile?.avatar_url || user?.avatar_url;
@@ -226,12 +213,12 @@ export default function Sidebar() {
   const role = getRole();
   const user = getStoredUser();
   const [profile, setProfile] = React.useState(null);
-  const [availabilityAccess, setAvailabilityAccess] = React.useState(() => readAvailabilityAccess());
+  const [hasAvailabilityAccess, setHasAvailabilityAccess] = React.useState(role === "ADMIN");
 
   const isActive = (path) => location.pathname === path;
   const showAvailabilityLink =
     role === "ADMIN" ||
-    Boolean(availabilityAccess?.month && availabilityAccess?.year);
+    hasAvailabilityAccess;
   const handleOpen = (value) => setOpen((current) => (current === value ? 0 : value));
 
   async function fetchNoti() {
@@ -261,20 +248,38 @@ export default function Sidebar() {
   }, []);
 
   React.useEffect(() => {
-    const refreshAvailabilityAccess = () => {
-      setAvailabilityAccess(readAvailabilityAccess());
+    if (role !== "EMPLOYEE") return undefined;
+
+    let isCurrent = true;
+    const refreshAvailabilityAccess = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        if (isCurrent) setHasAvailabilityAccess(false);
+        return;
+      }
+
+      try {
+        const { data } = await axios.get(`${API_URL}/availability/request/active`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (isCurrent) setHasAvailabilityAccess(Boolean(data?.active));
+      } catch {
+        if (isCurrent) setHasAvailabilityAccess(false);
+      }
     };
 
+    refreshAvailabilityAccess();
     const intervalId = window.setInterval(refreshAvailabilityAccess, 60000);
     window.addEventListener("availability-access-changed", refreshAvailabilityAccess);
     window.addEventListener("storage", refreshAvailabilityAccess);
 
     return () => {
+      isCurrent = false;
       window.clearInterval(intervalId);
       window.removeEventListener("availability-access-changed", refreshAvailabilityAccess);
       window.removeEventListener("storage", refreshAvailabilityAccess);
     };
-  }, []);
+  }, [role]);
 
   React.useEffect(() => {
     if (role !== "EMPLOYEE") return;

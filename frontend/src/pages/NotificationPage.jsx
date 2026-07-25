@@ -172,6 +172,10 @@ export default function NotificationPage() {
     () => data.filter((item) => !item.is_read).length,
     [data],
   );
+  const unreadAutoReadableCount = useMemo(
+    () => data.filter((item) => !item.is_read && !item.requires_manual_action).length,
+    [data],
+  );
   const notificationTypeOptions = useMemo(() => {
     const counts = data.reduce((acc, item) => {
       const key = notificationCategoryKey(item.type);
@@ -201,13 +205,15 @@ export default function NotificationPage() {
     () => filteredNotifications.slice(0, visibleCount),
     [filteredNotifications, visibleCount],
   );
-  const visibleIds = useMemo(
-    () => visibleNotifications.map((item) => item.notification_id),
+  const deletableVisibleIds = useMemo(
+    () => visibleNotifications
+      .filter((item) => item.can_delete)
+      .map((item) => item.notification_id),
     [visibleNotifications],
   );
   const hasMoreNotifications = visibleCount < filteredNotifications.length;
   const allVisibleSelected =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    deletableVisibleIds.length > 0 && deletableVisibleIds.every((id) => selectedIds.includes(id));
 
   const refreshNotificationCount = () => {
     window.dispatchEvent(new Event("notification-count-changed"));
@@ -237,7 +243,11 @@ export default function NotificationPage() {
       const item = data.find((n) => n.notification_id === id);
       if (item?.is_read) return;
 
-      await axios.patch(`${API_URL}/notifications/${id}`);
+      const userId = getUserId();
+      if (!userId) return;
+      await axios.patch(`${API_URL}/notifications/${id}`, null, {
+        headers: { "user-id": userId },
+      });
       setData((prev) =>
         prev.map((n) =>
           n.notification_id === id ? { ...n, is_read: 1 } : n,
@@ -258,7 +268,9 @@ export default function NotificationPage() {
         headers: { "user-id": userId },
       });
 
-      setData((prev) => prev.map((n) => ({ ...n, is_read: 1 })));
+      setData((prev) => prev.map((n) => (
+        n.requires_manual_action ? n : { ...n, is_read: 1 }
+      )));
       refreshNotificationCount();
     } catch (err) {
       console.error(err);
@@ -275,8 +287,8 @@ export default function NotificationPage() {
   const toggleSelectAll = () => {
     setSelectedIds((prev) =>
       allVisibleSelected
-        ? prev.filter((id) => !visibleIds.includes(id))
-        : Array.from(new Set([...prev, ...visibleIds])),
+        ? prev.filter((id) => !deletableVisibleIds.includes(id))
+        : Array.from(new Set([...prev, ...deletableVisibleIds])),
     );
   };
 
@@ -298,15 +310,15 @@ export default function NotificationPage() {
       const userId = getUserId();
       if (!userId) return;
 
-      await axios.delete(`${API_URL}/notifications`, {
+      const response = await axios.delete(`${API_URL}/notifications`, {
         headers: { "user-id": userId },
         data: { ids: selectedIds },
       });
 
-      setData((prev) =>
-        prev.filter((item) => !selectedIds.includes(item.notification_id)),
-      );
-      setSelectedIds([]);
+      if (response.data?.blocked_ids?.length) {
+        alert("Một số thông báo vẫn cần được xử lý thủ công nên chưa thể xóa.");
+      }
+      await fetchData();
       setBulkDeleteMode(false);
       refreshNotificationCount();
     } catch (err) {
@@ -431,16 +443,6 @@ export default function NotificationPage() {
 
   const openAvailabilityFill = async (notification) => {
     try {
-      await axios.patch(`${API_URL}/notifications/${notification.notification_id}`);
-
-      setData((prev) =>
-        prev.map((n) =>
-          n.notification_id === notification.notification_id
-            ? { ...n, is_read: 1 }
-            : n,
-        ),
-      );
-
       let availabilityData = [];
       try {
         availabilityData =
@@ -578,10 +580,10 @@ export default function NotificationPage() {
               <button
                 type="button"
                 onClick={markAllRead}
-                disabled={unreadCount === 0}
+                disabled={unreadAutoReadableCount === 0}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gray-900 px-3 text-sm font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
                 aria-label="Đánh dấu tất cả là đã xem"
-                title="Đánh dấu tất cả là đã xem"
+                title="Đánh dấu tất cả thông báo không cần xử lý thủ công"
               >
                 <CheckCircleIcon className="h-5 w-5" />
                 <span className="hidden sm:inline">Đã xem tất cả</span>
@@ -676,6 +678,10 @@ export default function NotificationPage() {
               n.type === "AVAILABILITY_EDIT_REQUEST" &&
               role === "ADMIN" &&
               n.request_status === "EDIT_PENDING";
+            const showAvailabilityFillButton =
+              ["AVAILABILITY_FILL_REQUEST", "AVAILABILITY_FILL_REMINDER"].includes(n.type) &&
+              role === "EMPLOYEE" &&
+              n.requires_manual_action;
 
             return (
               <article
@@ -685,10 +691,11 @@ export default function NotificationPage() {
                     if (event.target.closest("button, input, textarea, select, a, label")) {
                       return;
                     }
+                    if (!n.can_delete) return;
                     toggleSelected(n.notification_id);
                     return;
                   }
-                  if (n.type === "AVAILABILITY_FILL_REQUEST" && role === "EMPLOYEE") {
+                  if (n.requires_manual_action) {
                     return;
                   }
                   markRead(n.notification_id);
@@ -705,11 +712,13 @@ export default function NotificationPage() {
               >
                 {bulkDeleteMode && (
                   <span className={`absolute left-4 top-4 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition ${
-                    selectedIds.includes(n.notification_id)
+                    n.can_delete && selectedIds.includes(n.notification_id)
                       ? "border-red-600 bg-red-600 text-white"
-                      : "border-gray-300 bg-white text-transparent"
+                      : n.can_delete
+                        ? "border-gray-300 bg-white text-transparent"
+                        : "border-amber-300 bg-amber-50 text-amber-700"
                   }`}>
-                    <CheckCircleIcon className="h-4 w-4" />
+                    {n.can_delete ? <CheckCircleIcon className="h-4 w-4" /> : <ClockIcon className="h-4 w-4" />}
                   </span>
                 )}
                 {!n.is_read && (
@@ -739,6 +748,11 @@ export default function NotificationPage() {
                       >
                         {n.is_read ? "Đã đọc" : "Chưa đọc"}
                       </span>
+                      {n.requires_manual_action && (
+                        <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+                          Cần xử lý thủ công
+                        </span>
+                      )}
                     </div>
                     <p className="mt-2 text-sm font-semibold leading-6 text-gray-900">
                       {n.message}
@@ -758,9 +772,7 @@ export default function NotificationPage() {
                   </div>
                 </div>
 
-                {n.type === "AVAILABILITY_FILL_REQUEST" &&
-                  role === "EMPLOYEE" &&
-                  !n.is_read && (
+                {showAvailabilityFillButton && (
                     <div className="mt-4 flex justify-end">
                       <ActionButton
                         tone="blue"
