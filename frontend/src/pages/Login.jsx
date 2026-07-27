@@ -154,7 +154,7 @@ export default function Login() {
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
-      window.location.href = "/";
+      window.location.href = res.data.user?.role === "EMPLOYEE" ? "/shifts" : "/";
     } catch (err) {
       setError(loginErrorMessage(err));
     } finally {

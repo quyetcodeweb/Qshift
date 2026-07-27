@@ -223,12 +223,11 @@ export default function Sidebar() {
 
   async function fetchNoti() {
     try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      const userId = user?.user_id;
-      if (!userId) return;
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
       const res = await axios.get(`${API_URL}/notifications?summary=1`, {
-        headers: { "user-id": userId },
+        headers: { Authorization: `Bearer ${token}` },
       });
       setCount(Number(res.data?.unread_count || 0));
     } catch (err) {
@@ -345,14 +344,16 @@ export default function Sidebar() {
         </div>
 
         <List className="text-sm text-gray-700">
-          <Link to="/" className="block no-underline">
-            <ListItem className={`${baseItem} ${hoverItem} ${isActive("/") ? activeItem : ""}`}>
-              <ListItemPrefix className="min-w-[24px]">
-                <PresentationChartBarIcon className="h-5 w-5" />
-              </ListItemPrefix>
-              Tổng quan
-            </ListItem>
-          </Link>
+          {role === "ADMIN" && (
+            <Link to="/" className="block no-underline">
+              <ListItem className={`${baseItem} ${hoverItem} ${isActive("/") ? activeItem : ""}`}>
+                <ListItemPrefix className="min-w-[24px]">
+                  <PresentationChartBarIcon className="h-5 w-5" />
+                </ListItemPrefix>
+                Tổng quan
+              </ListItem>
+            </Link>
+          )}
 
           {role === "ADMIN" && (
             <Link to="/employeePage" className="block no-underline">

@@ -19,11 +19,6 @@ import { API_URL } from "../services/api";
 
 const notificationBatchSize = 8;
 
-function getUserId() {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  return user?.user_id;
-}
-
 function authHeaders() {
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -221,12 +216,12 @@ export default function NotificationPage() {
 
   async function fetchData() {
     try {
-      const userId = getUserId();
-      if (!userId) return;
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
       setLoading(true);
       const res = await axios.get(`${API_URL}/notifications`, {
-        headers: { "user-id": userId },
+        headers: { Authorization: `Bearer ${token}` },
       });
       setData(res.data || []);
       setSelectedIds([]);
@@ -243,10 +238,10 @@ export default function NotificationPage() {
       const item = data.find((n) => n.notification_id === id);
       if (item?.is_read) return;
 
-      const userId = getUserId();
-      if (!userId) return;
+      const token = localStorage.getItem("token");
+      if (!token) return;
       await axios.patch(`${API_URL}/notifications/${id}`, null, {
-        headers: { "user-id": userId },
+        headers: { Authorization: `Bearer ${token}` },
       });
       setData((prev) =>
         prev.map((n) =>
@@ -261,11 +256,11 @@ export default function NotificationPage() {
 
   const markAllRead = async () => {
     try {
-      const userId = getUserId();
-      if (!userId) return;
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
       await axios.patch(`${API_URL}/notifications/read-all`, null, {
-        headers: { "user-id": userId },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       setData((prev) => prev.map((n) => (
@@ -307,11 +302,11 @@ export default function NotificationPage() {
     if (!confirmed) return;
 
     try {
-      const userId = getUserId();
-      if (!userId) return;
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
       const response = await axios.delete(`${API_URL}/notifications`, {
-        headers: { "user-id": userId },
+        headers: { Authorization: `Bearer ${token}` },
         data: { ids: selectedIds },
       });
 

@@ -5,12 +5,13 @@ import {
   updateShift,
   deleteShift,
 } from "../controllers/shift.controller.js";
+import { verifyAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/", getShifts);
-router.post("/", createShift);
-router.put("/:id", updateShift);
-router.delete("/:id", deleteShift);
+router.get("/", verifyToken, getShifts);
+router.post("/", verifyToken, verifyAdmin, createShift);
+router.put("/:id", verifyToken, verifyAdmin, updateShift);
+router.delete("/:id", verifyToken, verifyAdmin, deleteShift);
 
 export default router;

@@ -112,11 +112,7 @@ export const sendAvailabilityRequest = async (req, res) => {
 };
 
 export const getNotifications = async (req, res) => {
-  const user_id = Number(req.headers["user-id"]);
-
-  if (!user_id) {
-    return res.status(400).json({ message: "Missing user_id" });
-  }
+  const user_id = Number(req.user?.user_id);
 
   if (String(req.query.summary || "") === "1") {
     const [summaryRows] = await db.query(
@@ -217,10 +213,7 @@ export const getNotifications = async (req, res) => {
 };
 
 export const markRead = async (req, res) => {
-  const userId = Number(req.headers["user-id"]);
-  if (!userId) {
-    return res.status(400).json({ message: "Missing user_id" });
-  }
+  const userId = Number(req.user?.user_id);
 
   const [notification] = await getNotificationActionStates(userId, [req.params.id]);
   if (!notification) {
@@ -241,11 +234,7 @@ export const markRead = async (req, res) => {
 };
 
 export const markAllRead = async (req, res) => {
-  const user_id = Number(req.headers["user-id"]);
-
-  if (!user_id) {
-    return res.status(400).json({ message: "Missing user_id" });
-  }
+  const user_id = Number(req.user?.user_id);
 
   const notifications = await getNotificationActionStates(user_id);
   const protectedIds = notifications
@@ -274,14 +263,10 @@ export const markAllRead = async (req, res) => {
 
 export const deleteNotifications = async (req, res) => {
   try {
-    const user_id = Number(req.headers["user-id"]);
+    const user_id = Number(req.user?.user_id);
     const ids = Array.isArray(req.body?.ids)
       ? [...new Set(req.body.ids.map(Number).filter(Boolean))]
       : [];
-
-    if (!user_id) {
-      return res.status(400).json({ message: "Missing user_id" });
-    }
 
     if (!ids.length) {
       return res.status(400).json({ message: "Missing notification ids" });

@@ -14,7 +14,7 @@ import ProfilePage from "./pages/ProfilePage";
 import PayrollPage from "./pages/PayrollPage";
 import ShiftSwapManagementPage from "./pages/ShiftSwapManagementPage";
 import StatisticsPage from "./pages/StatisticsPage";
-import { isLoggedIn } from "./utils/auth";
+import { getRole, isLoggedIn } from "./utils/auth";
 
 function App() {
   return (
@@ -32,7 +32,12 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route
+          index
+          element={
+            getRole() === "ADMIN" ? <Dashboard /> : <Navigate to="/shifts" replace />
+          }
+        />
 
         {/* ADMIN */}
         <Route

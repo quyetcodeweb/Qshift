@@ -124,7 +124,6 @@ function MobileChrome() {
   }, [role]);
 
   const employeeItems = [
-    { to: "/", label: "Tổng quan", icon: HomeIcon },
     { to: "/shifts", label: "Lịch", icon: CalendarDaysIcon },
     ...(showAvailabilityLink
       ? [{ to: "/availabilityPage", label: "Rảnh", icon: ClipboardDocumentListIcon }]

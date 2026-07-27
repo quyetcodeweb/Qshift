@@ -7,15 +7,15 @@ import {
   deleteUser,
   toggleUserStatus,
 } from "../controllers/user.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { verifyAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/", getUsers);
+router.get("/", verifyToken, verifyAdmin, getUsers);
 router.post("/me/password-otp", verifyToken, sendPasswordOtp);
 router.put("/me/password", verifyToken, changeOwnPassword);
-router.put("/:id", updateUser);
-router.delete("/:id", deleteUser);
-router.patch("/:id/status", toggleUserStatus);
+router.put("/:id", verifyToken, verifyAdmin, updateUser);
+router.delete("/:id", verifyToken, verifyAdmin, deleteUser);
+router.patch("/:id/status", verifyToken, verifyAdmin, toggleUserStatus);
 
 export default router;

@@ -13,6 +13,11 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../services/api";
 
+const authHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function UserPage() {
   const [users, setUsers] = useState([]);
   const [open, setOpen] = useState(false);
@@ -23,7 +28,7 @@ export default function UserPage() {
     selectedUser?.role === "ADMIN" && adminCount <= 1;
 
   const fetchUsers = async () => {
-    const res = await axios.get(`${API_URL}/users`);
+    const res = await axios.get(`${API_URL}/users`, { headers: authHeaders() });
     setUsers(res.data);
   };
 
@@ -49,7 +54,7 @@ export default function UserPage() {
     if (!confirmed) return;
 
     try {
-      await axios.delete(`${API_URL}/users/${user.user_id}`);
+      await axios.delete(`${API_URL}/users/${user.user_id}`, { headers: authHeaders() });
       fetchUsers();
       window.appPopup?.({
         type: "success",
@@ -80,6 +85,7 @@ export default function UserPage() {
       await axios.patch(
         `${API_URL}/users/${user.user_id}/status`,
         { status: !user.status },
+        { headers: authHeaders() },
       );
       fetchUsers();
       window.appPopup?.({
@@ -108,6 +114,7 @@ export default function UserPage() {
       await axios.put(
         `${API_URL}/users/${selectedUser.user_id}`,
         form,
+        { headers: authHeaders() },
       );
       setOpen(false);
       fetchUsers();

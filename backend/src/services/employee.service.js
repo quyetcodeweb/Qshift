@@ -24,9 +24,7 @@ export const createEmployee = async (data) => {
 
   // tạo username + password
   const username = phone;
-  const last5 = phone.slice(-5);
-  const rawPassword = "A" + last5;
-
+  const rawPassword = `A${phone.slice(-5)}`;
   const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
   const conn = await db.getConnection();
@@ -71,7 +69,7 @@ export const createEmployee = async (data) => {
       employee_id: employeeResult.insertId,
       user_id,
       username,
-      rawPassword, // trả về để test (sau này nên bỏ)
+      rawPassword,
     };
   } catch (err) {
     await conn.rollback();

@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { verifyAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 import {
   createEmployee,
   getEmployees,
@@ -14,8 +14,8 @@ import {
 
 const router = express.Router();
 
-router.post("/", createEmployee);
-router.get("/", getEmployees);
+router.post("/", verifyToken, verifyAdmin, createEmployee);
+router.get("/", verifyToken, verifyAdmin, getEmployees);
 router.get("/me", verifyToken, getMyProfile);
 router.get("/me/email-preferences", verifyToken, getMyEmailPreferences);
 router.put("/me/email-preferences", verifyToken, updateMyEmailPreferences);

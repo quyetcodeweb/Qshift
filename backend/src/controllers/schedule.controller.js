@@ -594,25 +594,12 @@ export async function getCurrentSchedules(req, res) {
     };
     let schedules;
 
-    if (userRole?.[0]?.role === "ADMIN" || scope === "all") {
+    if (userRole?.[0]?.role === "ADMIN") {
       console.log("[getCurrentSchedules] Shared access - fetching all schedules");
       schedules = await getSchedulesByFilters(scheduleFilters);
     } else {
-      console.log("[getCurrentSchedules] EMPLOYEE access - fetching personal schedules");
-      const [employee] = await database.query(
-        "SELECT employee_id FROM employees WHERE user_id = ?",
-        [userId]
-      );
-
-      if (!employee.length) {
-        console.log("[getCurrentSchedules] No employee record found");
-        return res.json([]);
-      }
-
-      schedules = await getSchedulesByFilters({
-        ...scheduleFilters,
-        employeeId: employee[0].employee_id,
-      });
+      console.log("[getCurrentSchedules] EMPLOYEE access - fetching published shared schedules");
+      schedules = await getSchedulesByFilters(scheduleFilters);
     }
 
     console.log("[getCurrentSchedules] Returning", schedules.length, "schedules");
@@ -962,7 +949,7 @@ async function getSchedulesByFilters({
   startDate,
   endDate,
 }) {
-  const conditions = [];
+  const conditions = ["s.status = 'PUBLISHED'"];
   const params = [];
 
   if (employeeId) {

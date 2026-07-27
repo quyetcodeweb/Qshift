@@ -1138,8 +1138,7 @@ export default function EmployeePage() {
 
           {!editingEmployee && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-medium leading-6 text-blue-800">
-              Tên đăng nhập là số điện thoại. Mật khẩu mặc định là chữ A kèm 5
-              số cuối của số điện thoại.
+              Tên đăng nhập là số điện thoại. Mật khẩu mặc định là chữ A kèm 5 số cuối của số điện thoại.
             </div>
           )}
           {editingEmployee && (

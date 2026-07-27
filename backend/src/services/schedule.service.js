@@ -5,9 +5,7 @@ import {
   getEmployeeRoles,
   getShiftRoleRequirements,
   getScheduleSettings,
-  getEmployeeShiftCounts,
-  getEmployeeShiftsInWeek,
-  hasConflictOnDate
+  getEmployeeShiftCounts
 } from "../models/schedule.model.js";
 
 // ===== HELPER: Build published schedule lookup for duplicate prevention =====
@@ -58,7 +56,10 @@ export async function generateSchedule({
       throw new Error("❌ Không có ca làm việc nào được cung cấp");
     }
     
-    if (!month || !year) {
+    const targetMonth = Number(month);
+    const targetYear = Number(year);
+    if (!Number.isInteger(targetMonth) || targetMonth < 1 || targetMonth > 12 ||
+        !Number.isInteger(targetYear) || targetYear < 2000 || targetYear > 2100) {
       throw new Error("❌ Tháng và năm được yêu cầu");
     }
     
@@ -67,7 +68,11 @@ export async function generateSchedule({
     }
 
     for (const dateStr of Object.keys(detailed_requirements)) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const date = new Date(`${dateStr}T00:00:00Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) ||
+          Number.isNaN(date.getTime()) ||
+          date.getUTCFullYear() !== targetYear ||
+          date.getUTCMonth() + 1 !== targetMonth) {
         validationErrors.push(`❌ Định dạng ngày không hợp lệ: ${dateStr}`);
       }
     }
@@ -91,6 +96,14 @@ export async function generateSchedule({
           .map((s) => s.shift_id)
           .join(", ")}`
       );
+    }
+
+    const knownShiftIds = new Set(shiftDetails.map((shift) => Number(shift.shift_id)));
+    const missingShiftIds = normalizedShifts
+      .map((shift) => shift.shift_id)
+      .filter((shiftId) => !knownShiftIds.has(shiftId));
+    if (missingShiftIds.length) {
+      throw new Error(`Unknown shift IDs: ${[...new Set(missingShiftIds)].join(", ")}`);
     }
 
     const [employees] = await database.query(
@@ -120,7 +133,18 @@ export async function generateSchedule({
     );
 
     // ✅ NEW: Load published shifts to prevent duplicates
-    const publishedScheduleSet = await buildPublishedScheduleSet(month, year);
+    const publishedScheduleSet = await buildPublishedScheduleSet(targetMonth, targetYear);
+    const existingAssignments = await getExistingAssignments(targetMonth, targetYear);
+    const allShiftDetails = [
+      ...shiftDetails,
+      ...existingAssignments
+        .filter((assignment) => !knownShiftIds.has(assignment.shift_id))
+        .map((assignment) => ({
+          shift_id: assignment.shift_id,
+          start_time: assignment.start_time,
+          end_time: assignment.end_time,
+        })),
+    ];
 
     const employeeRoles = {};
     for (const emp of employees) {
@@ -159,7 +183,11 @@ export async function generateSchedule({
       `[generateSchedule] 📅 Khả dụng: ${employeesWithData.size} nhân viên có dữ liệu (từ ${availabilityResult.dataSource})`
     );
 
-    const currentShiftCounts = await getEmployeeShiftCounts(employees);
+    const currentShiftCounts = await getEmployeeShiftCounts(
+      employees,
+      targetMonth,
+      targetYear
+    );
 
     const requirementsByDateShift = {};
     Object.entries(detailed_requirements).forEach(([dateStr, dayConfig]) => {
@@ -186,6 +214,10 @@ export async function generateSchedule({
         const numCount = Number(count) || 0;
 
         if (numCount > 0) {
+          if (!knownShiftIds.has(shiftId)) {
+            validationErrors.push(`Unknown shift ID in detailed requirements: ${shiftId}`);
+            return;
+          }
           if (!requirementsByDateShift[normalizedDate]) {
             requirementsByDateShift[normalizedDate] = {};
           }
@@ -193,6 +225,10 @@ export async function generateSchedule({
         }
       });
     });
+
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join("; "));
+    }
 
     console.log(
       `[generateSchedule] 📋 Yêu cầu: ${Object.keys(requirementsByDateShift).length} ngày, ` +
@@ -229,7 +265,7 @@ export async function generateSchedule({
         if (!shiftDetail) continue;
 
         const requirements = prioritizeRoleRequirements(
-          shiftRoleRequirements[shiftIdNum] || [],
+          getRoleRequirementsForDate(shiftRoleRequirements[shiftIdNum] || [], dateStr),
           requiredCount
         );
         const roleAssignmentDetails = [];
@@ -274,10 +310,11 @@ export async function generateSchedule({
                 workDate: dateStr,
                 generatedSchedule,
                 publishedScheduleSet,
+                existingAssignments,
                 employeeAvailability,
                 employeesWithData,
                 employeeAssignmentCount,
-                shiftDetails,
+                shiftDetails: allShiftDetails,
                 max_shifts_per_week,
                 max_shifts_per_month
               });
@@ -346,7 +383,7 @@ export async function generateSchedule({
 
         let toAssign = requiredCount - assigned;
         const requirements = prioritizeRoleRequirements(
-          shiftRoleRequirements[shiftIdNum] || [],
+          getRoleRequirementsForDate(shiftRoleRequirements[shiftIdNum] || [], dateStr),
           requiredCount
         );
         const roleTotal = requirements.reduce(
@@ -393,10 +430,11 @@ export async function generateSchedule({
             workDate: dateStr,
             generatedSchedule,
             publishedScheduleSet,
+            existingAssignments,
             employeeAvailability,
             employeesWithData,
             employeeAssignmentCount,
-            shiftDetails,
+            shiftDetails: allShiftDetails,
             max_shifts_per_week,
             max_shifts_per_month
           });
@@ -505,6 +543,31 @@ export async function generateSchedule({
     console.error("[generateSchedule] ❌ Lỗi:", error.message);
     throw error;
   }
+}
+
+async function getExistingAssignments(month, year) {
+  const [rows] = await database.query(
+    `SELECT s.employee_id,
+            s.shift_id,
+            s.role_id,
+            s.status,
+            DATE_FORMAT(s.work_date, '%Y-%m-%d') AS work_date,
+            sh.start_time,
+            sh.end_time
+       FROM schedules s
+       JOIN shifts sh ON sh.shift_id = s.shift_id
+      WHERE s.status IN ('DRAFT', 'PUBLISHED')
+        AND MONTH(s.work_date) = ?
+        AND YEAR(s.work_date) = ?`,
+    [month, year]
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    employee_id: Number(row.employee_id),
+    shift_id: Number(row.shift_id),
+    role_id: row.role_id ? Number(row.role_id) : null,
+  }));
 }
 
 function normalizeDbBoolean(value) {
@@ -793,6 +856,7 @@ function normalizeRoleRequirements(override, savedRequirements) {
         role_name: requirement?.role_name,
         color: requirement?.color,
         priority: requirement?.priority,
+        day_of_week: requirement?.day_of_week,
         required_count: Math.max(
           0,
           Number(requirement?.required_count ?? requirement) || 0
@@ -814,6 +878,7 @@ function normalizeRoleRequirements(override, savedRequirements) {
       role_id: roleId,
       role_name: row.role_name || existing?.role_name,
       color: row.color || existing?.color,
+      day_of_week: row.day_of_week ?? existing?.day_of_week ?? 0,
       priority: Math.max(
         1,
         Number(row.priority ?? existing?.priority ?? byRole.size + 1) || 1
@@ -823,6 +888,15 @@ function normalizeRoleRequirements(override, savedRequirements) {
   });
 
   return Array.from(byRole.values());
+}
+
+function getRoleRequirementsForDate(requirements, dateStr) {
+  // 0/null means every day; 1..7 follows Sunday..Saturday.
+  const weekday = new Date(`${dateStr}T00:00:00Z`).getUTCDay() + 1;
+  return requirements.filter((requirement) => {
+    const configuredDay = Number(requirement.day_of_week || 0);
+    return configuredDay === 0 || configuredDay === weekday;
+  });
 }
 
 function prioritizeRoleRequirements(requirements, totalRequired) {
@@ -869,10 +943,12 @@ async function prepareAvailability(month, year, frontendAvailability) {
   const employeesWithData = new Set();
   let dataSource = "none";
 
-  const hasFrontendData = 
-    frontendAvailability && 
-    typeof frontendAvailability === "object" &&
-    Object.keys(frontendAvailability).length > 0;
+  // Availability stored in the database is the only scheduling authority.
+  // Client payloads can be stale or manipulated and must not make an employee eligible.
+  const hasFrontendData = false;
+  if (frontendAvailability && typeof frontendAvailability === "object") {
+    console.warn("[prepareAvailability] Ignoring client-provided availability");
+  }
 
   const addAvailabilityRecord = (employeeId, workDate, shiftId) => {
     const empId = Number(employeeId);
@@ -994,6 +1070,7 @@ function canAssign({
   workDate,
   generatedSchedule,
   publishedScheduleSet,
+  existingAssignments,
   employeeAvailability,
   employeesWithData,
   employeeAssignmentCount,
@@ -1041,6 +1118,21 @@ function canAssign({
     return { can: false, reason: "Không có sẵn cho ca này" };
   }
 
+  const candidate = { employee_id: empId, shift_id, work_date: workDate };
+  const candidateBounds = getShiftBoundsForAssignment(candidate, shiftDetails);
+  const occupiedAssignments = [...generatedSchedule, ...(existingAssignments || [])];
+  const conflictingAssignment = occupiedAssignments.find((assignment) => {
+    if (Number(assignment.employee_id) !== empId) return false;
+    const assignmentBounds = getShiftBoundsForAssignment(assignment, shiftDetails);
+    return candidateBounds && assignmentBounds &&
+      candidateBounds.start < assignmentBounds.end &&
+      assignmentBounds.start < candidateBounds.end;
+  });
+
+  if (conflictingAssignment) {
+    return { can: false, reason: "Shift time conflicts with an existing assignment" };
+  }
+
   // ===== CHECK 4: Overlapping shifts on the same date =====
   if (shiftDetails && shiftDetails.length > 0) {
     const newShift = shiftDetails.find((s) => s.shift_id === shift_id);
@@ -1073,11 +1165,11 @@ function canAssign({
   // ===== CHECK 6: Max per week check =====
   const weeklyLimit = Number(max_shifts_per_week);
   if (Number.isFinite(weeklyLimit) && weeklyLimit > 0) {
-    const workDateObj = new Date(workDate);
-    const shiftsThisWeek = generatedSchedule.filter((s) => {
+    const workDateObj = new Date(`${workDate}T00:00:00Z`);
+    const shiftsThisWeek = [...generatedSchedule, ...(existingAssignments || [])].filter((s) => {
       return (
-        s.employee_id === empId &&
-        isInSameWeek(new Date(s.work_date), workDateObj)
+        Number(s.employee_id) === empId &&
+        isInSameWeek(new Date(`${s.work_date}T00:00:00Z`), workDateObj)
       );
     }).length;
 
@@ -1132,18 +1224,15 @@ function addAssignment(
  * Helper: Check if two dates are in the same week
  */
 function isInSameWeek(date1, date2) {
-  const getWeekNumber = (d) => {
-    const tempDate = new Date(d);
-    tempDate.setHours(0, 0, 0, 0);
-    tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7));
-    const yearStart = new Date(tempDate.getFullYear(), 0, 1);
-    return Math.ceil(((tempDate - yearStart) / 86400000 + 1) / 7);
+  const mondayKey = (date) => {
+    const value = new Date(date);
+    value.setUTCHours(0, 0, 0, 0);
+    const offset = (value.getUTCDay() + 6) % 7;
+    value.setUTCDate(value.getUTCDate() - offset);
+    return value.toISOString().slice(0, 10);
   };
 
-  return (
-    getWeekNumber(date1) === getWeekNumber(date2) &&
-    date1.getFullYear() === date2.getFullYear()
-  );
+  return mondayKey(date1) === mondayKey(date2);
 }
 
 // ===== REST OF FUNCTIONS UNCHANGED =====
@@ -1213,13 +1302,7 @@ export async function publishScheduleService({ month, year, shifts, schedule_id 
       }
       console.log("[publishScheduleService] ✓ Công bố", shifts.length, "ca");
     } else if (schedule_id) {
-      const [result] = await connection.query(
-        `UPDATE schedules 
-         SET status = 'PUBLISHED'
-         WHERE status = 'DRAFT' AND MONTH(work_date) = ? AND YEAR(work_date) = ?`,
-        [month, year]
-      );
-      console.log("[publishScheduleService] ✓ Cập nhật", result.changedRows, "bản nháp");
+      throw new Error("Publishing requires an explicit list of schedule assignments");
     }
 
     await connection.commit();

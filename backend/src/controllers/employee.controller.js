@@ -10,7 +10,7 @@ export const createEmployee = async (req, res) => {
     const employee = await employeeService.createEmployee(req.body);
     res.json({ message: "Employee created", employee });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 };
 
@@ -89,6 +89,10 @@ export const getEmployeeById = async (req, res) => {
 
     if (!employee) {
       return res.status(404).json({ message: "Không tìm thấy nhân viên" });
+    }
+
+    if (req.user?.role !== "ADMIN" && employee.user_id !== req.user?.user_id) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
     res.json(employee);

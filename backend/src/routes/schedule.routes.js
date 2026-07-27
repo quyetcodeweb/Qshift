@@ -40,13 +40,13 @@ router.post("/export/preview", verifyToken, verifyAdmin, getScheduleExportPrevie
 router.post("/export", verifyToken, verifyAdmin, exportScheduleWorkbook);
 
 // Draft management routes (more specific routes before generic)
-router.get("/drafts/list", verifyToken, getDraftsList);
-router.get("/drafts/:draft_id", verifyToken, getDraftDetail);
-router.post("/drafts", verifyToken, saveDraftWithName);
-router.put("/drafts/:draft_id", verifyToken, updateDraftByName);
-router.delete("/drafts/:draft_id", verifyToken, deleteDraftByName);
-router.get("/drafts", verifyToken, getDrafts);
-router.delete("/draft/:id", verifyToken, deleteDraft);
+router.get("/drafts/list", verifyToken, verifyAdmin, getDraftsList);
+router.get("/drafts/:draft_id", verifyToken, verifyAdmin, getDraftDetail);
+router.post("/drafts", verifyToken, verifyAdmin, saveDraftWithName);
+router.put("/drafts/:draft_id", verifyToken, verifyAdmin, updateDraftByName);
+router.delete("/drafts/:draft_id", verifyToken, verifyAdmin, deleteDraftByName);
+router.get("/drafts", verifyToken, verifyAdmin, getDrafts);
+router.delete("/draft/:id", verifyToken, verifyAdmin, deleteDraft);
 
 // Public routes
 router.get("/current", verifyToken, getCurrentSchedules);
@@ -56,17 +56,17 @@ router.get("/supplemental-requests", verifyToken, getSupplementalRequests);
 router.post("/supplemental-requests", verifyToken, createSupplementalRequest);
 router.post("/supplemental-requests/:id/accept", verifyToken, acceptSupplementalRequest);
 router.delete("/supplemental-requests/:id", verifyToken, deleteSupplementalRequest);
-router.get("/availability/:month/:year", verifyToken, getAvailability);
-router.get("/stats", verifyToken, getEmployeeStats);
+router.get("/availability/:month/:year", verifyToken, verifyAdmin, getAvailability);
+router.get("/stats", verifyToken, verifyAdmin, getEmployeeStats);
 
 // Admin routes
-router.post("/auto-generate", verifyToken, autoGenerate);
-router.post("/save-draft", verifyToken, saveDraft);
-router.post("/publish", verifyToken, publishSchedule);
+router.post("/auto-generate", verifyToken, verifyAdmin, autoGenerate);
+router.post("/save-draft", verifyToken, verifyAdmin, saveDraft);
+router.post("/publish", verifyToken, verifyAdmin, publishSchedule);
 
 // Schedule CRUD routes (generic routes last)
-router.post("/", verifyToken, createSingleSchedule);
-router.put("/:id", verifyToken, updateSingleSchedule);
-router.delete("/:id", verifyToken, deleteSingleSchedule);
+router.post("/", verifyToken, verifyAdmin, createSingleSchedule);
+router.put("/:id", verifyToken, verifyAdmin, updateSingleSchedule);
+router.delete("/:id", verifyToken, verifyAdmin, deleteSingleSchedule);
 
 export default router;

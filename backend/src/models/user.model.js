@@ -3,7 +3,11 @@ import db from "../config/db.js";
 export const getUsers = async () => {
   const [rows] = await db.query(`
     SELECT
-      u.*,
+      u.user_id,
+      u.username,
+      u.role,
+      u.status,
+      u.created_at,
       e.employee_id,
       e.name AS employee_name
     FROM users u

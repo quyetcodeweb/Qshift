@@ -198,11 +198,16 @@ export default function AvailabilityPage() {
     try {
       setLoadingEmployees(true);
       const [employeeRes, shiftRes] = await Promise.all([
-        axios.get(`${API_URL}/employees`, { headers: authHeaders() }),
+        axios.get(
+          isEmployee ? `${API_URL}/employees/me` : `${API_URL}/employees`,
+          { headers: authHeaders() },
+        ),
         axios.get(`${API_URL}/shifts`, { headers: authHeaders() }),
       ]);
 
-      const employeeList = employeeRes.data || [];
+      const employeeList = Array.isArray(employeeRes.data)
+        ? employeeRes.data
+        : employeeRes.data ? [employeeRes.data] : [];
       setEmployees(employeeList);
       setShifts(shiftRes.data || []);
 

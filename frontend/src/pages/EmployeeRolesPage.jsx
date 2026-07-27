@@ -50,7 +50,10 @@ export default function EmployeeRolesPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await axios.get(`${API_URL}/employees`);
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${API_URL}/employees`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setEmployees(res.data);
       if (createdEmployeeId) {
         setSelectedEmployee(String(createdEmployeeId));

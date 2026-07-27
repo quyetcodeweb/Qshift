@@ -90,6 +90,7 @@ export async function getShiftRoleRequirements(shiftId) {
       srr.id,
       srr.shift_id,
       srr.role_id,
+      srr.day_of_week,
       srr.required_count,
       r.role_name,
       r.color
@@ -139,7 +140,7 @@ export async function hasConflictOnDate(employeeId, workDate) {
 /**
  * Get all employee shift counts (for load balancing)
  */
-export async function getEmployeeShiftCounts(employees) {
+export async function getEmployeeShiftCounts(employees, month, year) {
   const placeholders = employees.map(() => "?").join(",");
   const query = `
     SELECT 
@@ -148,11 +149,13 @@ export async function getEmployeeShiftCounts(employees) {
     FROM employees e
     LEFT JOIN schedules s ON e.employee_id = s.employee_id 
       AND s.status IN ('DRAFT', 'PUBLISHED')
+      AND MONTH(s.work_date) = ?
+      AND YEAR(s.work_date) = ?
     WHERE e.employee_id IN (${placeholders})
     GROUP BY e.employee_id
   `;
 
-  const [counts] = await database.query(query, employees.map(e => e.employee_id));
+  const [counts] = await database.query(query, [month, year, ...employees.map(e => e.employee_id)]);
   
   // Return as object keyed by employee_id
   const result = {};

@@ -16,6 +16,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import pool from "./config/db.js";
 import { runMigrations } from "./utils/migrate.js";
 import { scanMissingAttendanceNotifications } from "./controllers/attendance.controller.js";
+import { verifyAdmin, verifyToken } from "./middlewares/auth.middleware.js";
 dotenv.config();
 
 const app = express();
@@ -38,8 +39,8 @@ const isAllowedOrigin = (origin) => {
   if (allowedOrigins.includes(origin)) return true;
 
   try {
-    const { hostname, protocol } = new URL(origin);
-    return protocol === "https:" && hostname.endsWith(".vercel.app");
+    const { protocol } = new URL(origin);
+    return protocol === "https:" && configuredOrigins.includes(origin);
   } catch {
     return false;
   }
@@ -64,7 +65,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Qshift backend is running" });
 });
 
-app.get("/api/db-check", async (req, res) => {
+app.get("/api/db-check", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [rows] = await pool.query("SELECT 1 AS result");
     res.json({
@@ -74,13 +75,7 @@ app.get("/api/db-check", async (req, res) => {
   } catch (err) {
     console.error("DB CHECK ERROR:", err);
 
-    res.status(500).json({
-      success: false,
-      message: err.message,
-      code: err.code,
-      errno: err.errno,
-      sqlState: err.sqlState,
-    });
+    res.status(500).json({ success: false, message: "Database unavailable" });
   }
 });
 

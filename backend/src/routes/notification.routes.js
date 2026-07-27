@@ -6,13 +6,14 @@ import {
   markAllRead,
   deleteNotifications,
 } from "../controllers/notification.controller.js";
+import { verifyAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/send", sendAvailabilityRequest);
-router.get("/", getNotifications);
-router.patch("/read-all", markAllRead);
-router.delete("/", deleteNotifications);
-router.patch("/:id", markRead);
+router.post("/send", verifyToken, verifyAdmin, sendAvailabilityRequest);
+router.get("/", verifyToken, getNotifications);
+router.patch("/read-all", verifyToken, markAllRead);
+router.delete("/", verifyToken, deleteNotifications);
+router.patch("/:id", verifyToken, markRead);
 
 export default router;
